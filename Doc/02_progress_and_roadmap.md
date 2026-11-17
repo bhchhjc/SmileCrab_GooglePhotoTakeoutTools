@@ -35,7 +35,7 @@ flowchart LR
 
 ---
 
-### Phase 1: 코어 엔진 개발 (Takeout 메타데이터 파서 & 매칭 엔진 - 진행 중)
+### Phase 1: 코어 엔진 개발 (Takeout 메타데이터 파서 & 매칭 엔진 - 완료)
 - [x] 도메인 모델 설계 (`src/core/models.py`)
   - [x] `MediaMetadata`, `MediaFile`, `GeoLocation`, `MatchResult` 정의
 - [x] 크로스플랫폼 유틸리티 (`src/core/utils.py`)
@@ -51,23 +51,33 @@ flowchart LR
   - [x] 4단계: 역방향 제목 조회 (`title` Reverse Lookup)
   - [x] 5단계: 46~51자 파일명 잘림 접두사 매칭
   - [x] 6단계: 파일명 날짜 Fallback
-- [x] 단위 테스트 작성 및 통과 (`tests/test_parser.py`, `tests/test_matcher.py` - 7/7 OK)
-- [x] 실제 사용자 샘플 데이터(201개 파일) 대상 검증 수행 (`samples/verify_sample_matching.py`)
-  - [x] **매칭 성공률: 100.00% (201/201 파일 매칭 완료)**
 - [x] 메타데이터 주입기 (`src/core/exif_writer.py`)
   - [x] `DateTimeOriginal`, `DateTimeDigitized`, `ImageDescription`, GPS 좌표 주입
+  - [x] 썸네일 64KB 초과 자동 방어
 - [x] OS별 파일 시스템 날짜(`mtime`, `birthtime`) 동기화 (`src/core/os_sync.py`)
   - [x] macOS `SetFile` / Windows `SetFileTime` / 공통 `os.utime`
 - [x] 주입 전/후 파일 변화 실측 검증 (`samples/run_demo_inspection.py`)
-- [ ] 규칙 기반 파일 정리기 (`src/services/process_service.py`)
+- [x] 규칙 기반 파일 정리기 (`src/services/process_service.py`)
+  - [x] `YYYY/MM` 등 다중 계층 폴더 생성
+  - [x] JSON 파일 완전 분리 (출력 디렉토리에 미디어 파일만 정돈)
+  - [x] SHA-256 해시 기반 중복 파일 스킵
+  - [x] 메타데이터 풍부도 우선순위 정렬 파이프라인
+- [x] 단위 테스트 작성 및 통과 (12/12 OK)
 
 ---
 
-### Phase 2: 로컬 데이터베이스 구축 (SQLite)
-- [ ] SQLite 스키마 정의 (`media_files`, `metadata`, `fts`)
-- [ ] 작업 이력 및 중단/재개(Resume) 상태 트랜잭션 관리
-- [ ] 파일 해시(SHA256) 기반 중복 검출 및 인덱싱
-- [ ] 키워드/날짜/카메라 기종 고속 검색 쿼리 작성
+### Phase 2: 로컬 데이터베이스 구축 (SQLite - 완료)
+- [x] SQLite 스키마 및 DB 매니저 (`src/data/database.py`)
+  - [x] `media_files` 테이블 및 해시 인덱스
+  - [x] `metadata` 테이블 및 날짜 인덱스
+  - [x] FTS5 풀텍스트 가상 테이블
+- [x] 미디어 레포지토리 (`src/data/repositories/media_repo.py`)
+  - [x] 해시 기반 중복 조회 (`find_by_hash`)
+  - [x] 미디어 & 메타데이터 트랜잭션 적재 (`insert_media`)
+  - [x] 라이브러리 전체 통계 (`get_statistics`)
+  - [x] 키워드, 연/월, 미디어 유형, GPS 복합 고속 검색 (`search_media`)
+- [x] 실제 사용자 샘플 201개 파일 대상 통합 파이프라인 검증 완료
+  - [x] **201/201개 파일 2.53초 만에 정리 완료 (오류 0건, JSON 0건)**
 
 ---
 

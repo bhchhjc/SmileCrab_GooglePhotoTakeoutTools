@@ -111,7 +111,16 @@ class ExifWriter:
                 modified = True
 
             if modified:
-                exif_bytes = piexif.dump(exif_dict)
+                try:
+                    exif_bytes = piexif.dump(exif_dict)
+                except ValueError as ve:
+                    # 썸네일 용량이 64KB 초과하여 piexif.dump 실패 시 썸네일 제거 후 재시도
+                    if "thumbnail" in str(ve).lower() or "too large" in str(ve).lower():
+                        exif_dict["thumbnail"] = None
+                        exif_bytes = piexif.dump(exif_dict)
+                    else:
+                        raise
+
                 piexif.insert(exif_bytes, str(image_path))
                 return True
 
