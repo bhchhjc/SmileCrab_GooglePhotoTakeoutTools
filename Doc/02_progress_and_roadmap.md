@@ -54,8 +54,11 @@ flowchart LR
 - [x] 단위 테스트 작성 및 통과 (`tests/test_parser.py`, `tests/test_matcher.py` - 7/7 OK)
 - [x] 실제 사용자 샘플 데이터(201개 파일) 대상 검증 수행 (`samples/verify_sample_matching.py`)
   - [x] **매칭 성공률: 100.00% (201/201 파일 매칭 완료)**
-- [ ] 메타데이터 주입기 (`src/core/exif_writer.py`, `video_writer.py`)
-- [ ] OS별 파일 시스템 날짜(`mtime`, `birthtime`) 동기화 (`src/core/os_sync.py`)
+- [x] 메타데이터 주입기 (`src/core/exif_writer.py`)
+  - [x] `DateTimeOriginal`, `DateTimeDigitized`, `ImageDescription`, GPS 좌표 주입
+- [x] OS별 파일 시스템 날짜(`mtime`, `birthtime`) 동기화 (`src/core/os_sync.py`)
+  - [x] macOS `SetFile` / Windows `SetFileTime` / 공통 `os.utime`
+- [x] 주입 전/후 파일 변화 실측 검증 (`samples/run_demo_inspection.py`)
 - [ ] 규칙 기반 파일 정리기 (`src/services/process_service.py`)
 
 ---
