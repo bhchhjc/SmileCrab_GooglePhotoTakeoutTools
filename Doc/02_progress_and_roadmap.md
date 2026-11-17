@@ -82,13 +82,27 @@ flowchart LR
 ---
 
 ### Phase 3: PySide6 GUI 인터페이스 구현
-- [ ] 메인 윈도우 프레임 및 다크/라이트 테마 구성
-- [ ] 백그라운드 비동기 워커(`QThreadPool`, `QRunnable`) 및 취소/일시정지 기능
-- [ ] Step 1: 폴더 선택 및 디스크 여유 공간 점검(Pre-flight check) 뷰
-- [ ] Step 2: 드라이런(Dry-run) 분석 통계 및 차트 뷰
-- [ ] Step 3: 정리 옵션(폴더 규칙, 모드 등) 설정 패널
-- [ ] Step 4: 실시간 진행률(Progress bar) 및 로그 뷰어
-- [ ] Step 5: 로컬 미디어 라이브러리 및 검색 그리드 뷰
+
+#### Phase 3-A: 마법사(Wizard) 초기 구현 (완료 → Phase 3-B로 대체)
+- [x] 마법사 방식 4단계 기본 UI 구현 (Wizard 스타일, 다크 테마)
+- [x] 백그라운드 비동기 워커(`QThreadPool`, `QRunnable`) 및 취소 기능
+- [x] 메인 진입점 연결 (`src/main.py`) 및 경로 오류 수정
+
+#### Phase 3-B: 사이드바 네비게이션 UI 재설계 (완료 — 2026-11-17)
+- [x] UI 재설계 분석 문서 작성 (`Doc/07_ui_redesign_sidebar_analysis.md`)
+- [x] **라이트 모드** 디자인 시스템 구축 (`src/ui/theme.py` 전면 재작성)
+- [x] ChatGPT 방식 사이드바 토글 컴포넌트 (`src/ui/components/sidebar_widget.py`)
+- [x] 메인 윈도우 사이드바 + QStackedWidget 구조로 전면 재설계 (`src/ui/main_window.py`)
+- [x] 대시보드 뷰: 통계 카드 + 최근 작업 목록 (`src/ui/views/dashboard_view.py`)
+- [x] 새 작업 뷰: 서브스텝 방식 (폴더선택→미리보기→진행→완료) (`src/ui/views/job_view.py`)
+- [x] 처리 이력 뷰: 날짜 + 앨범 단위 작업 이력 테이블 (`src/ui/views/history_view.py`)
+- [x] 미디어 라이브러리 뷰: SQLite FTS 복합 검색 (기존 유지 + 라이트 모드 적용)
+- [x] 설정 뷰: 처리 기본값 + 앱 버전 정보 (`src/ui/views/settings_view.py`)
+- [x] DB 집계 쿼리 추가: `get_statistics()`, `get_recent_jobs()`, `get_history_summary()` (`src/data/database.py`)
+- [x] 전체 모듈 임포트 검증 완료
+- [x] 단위 테스트 12/12 모두 통과
+
+> **커밋 대기 중** — PM 승인 후 커밋 예정
 
 ---
 
