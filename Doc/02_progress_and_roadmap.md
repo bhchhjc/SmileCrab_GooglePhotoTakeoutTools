@@ -35,23 +35,28 @@ flowchart LR
 
 ---
 
-### Phase 1: 코어 엔진 개발 (Takeout 메타데이터 파서 & 매칭 엔진)
-- [ ] JSON 메타데이터 파서 모듈 (`parser`)
-  - [ ] `photoTakenTime`, `geoData`, `description` 안전 추출
-  - [ ] 유니코드(NFC/NFD) 정규화
-- [ ] 파일 매칭 엔진 (`matcher`)
-  - [ ] 기본 확장자 매칭 (`.jpg` $\leftrightarrow$ `.jpg.json`)
-  - [ ] 이름 잘림 현상 역방향 조회 (`title` 기반 Reverse Lookup)
-  - [ ] 중복 번호 `(1)` 불일치 정규식 매칭
-  - [ ] 보정본(`-edited`) 및 모션포토 그룹화
-- [ ] 메타데이터 주입기 (`writer`)
-  - [ ] 사진 EXIF (`DateTimeOriginal`, GPS, ImageDescription) 주입
-  - [ ] 동영상 메타데이터 주입
-  - [ ] OS별 파일 시스템 날짜(`mtime`, `birthtime`) 동기화
-- [ ] 규칙 기반 파일 정리기 (`organizer`)
-  - [ ] 복사(Copy) / 이동(Move) 전략 지원
-  - [ ] 연도/월별 폴더 계층 생성
-  - [ ] JSON 파일 격리/제거
+### Phase 1: 코어 엔진 개발 (Takeout 메타데이터 파서 & 매칭 엔진 - 진행 중)
+- [x] 도메인 모델 설계 (`src/core/models.py`)
+  - [x] `MediaMetadata`, `MediaFile`, `GeoLocation`, `MatchResult` 정의
+- [x] 크로스플랫폼 유틸리티 (`src/core/utils.py`)
+  - [x] macOS NFD 한글 자소 분리 방지 (`unicodedata.normalize('NFC')`)
+  - [x] 파일명 날짜 정규식 파서 (Fallback 대응)
+- [x] JSON 메타데이터 파서 모듈 (`src/core/parser.py`)
+  - [x] `photoTakenTime`, `creationTime`, `geoData`, `description`, `people` 안전 추출
+- [x] 다단계 휴리스틱 파일 매칭 엔진 (`src/core/matcher.py`)
+  - [x] 디렉토리 사전 인덱싱 (`DirectoryMetadataIndex`)을 통한 고속 매칭
+  - [x] 1단계: 완전 일치 (`.json`, `.supplemental-metadata.json`)
+  - [x] 2단계: 중복 번호 `(1)` 불일치 정규식 매칭
+  - [x] 3단계: 한국어 수정본(`-수정됨`) 및 영문(`-edited`) 원본 역추적
+  - [x] 4단계: 역방향 제목 조회 (`title` Reverse Lookup)
+  - [x] 5단계: 46~51자 파일명 잘림 접두사 매칭
+  - [x] 6단계: 파일명 날짜 Fallback
+- [x] 단위 테스트 작성 및 통과 (`tests/test_parser.py`, `tests/test_matcher.py` - 7/7 OK)
+- [x] 실제 사용자 샘플 데이터(201개 파일) 대상 검증 수행 (`samples/verify_sample_matching.py`)
+  - [x] **매칭 성공률: 100.00% (201/201 파일 매칭 완료)**
+- [ ] 메타데이터 주입기 (`src/core/exif_writer.py`, `video_writer.py`)
+- [ ] OS별 파일 시스템 날짜(`mtime`, `birthtime`) 동기화 (`src/core/os_sync.py`)
+- [ ] 규칙 기반 파일 정리기 (`src/services/process_service.py`)
 
 ---
 
