@@ -18,7 +18,7 @@ flowchart LR
 
 ## 📋 세부 단계별 체크리스트
 
-### Phase 0: 프로젝트 기획 및 기본 문서화 (현재 진행 중)
+### Phase 0: 프로젝트 기획 및 기본 문서화 (완료)
 - [x] 프로젝트 역할(PM / 직원) 및 기본 운영 규칙 확립
 - [x] 기술 스택 확정 (Python + PySide6 + SQLite)
 - [x] `/Doc` 표준 문서 체계 구축
@@ -28,8 +28,10 @@ flowchart LR
   - [x] UI/UX 조사 및 설계안 (`04_ui_ux_research.md`)
   - [x] Takeout 데이터 구조 분석서 (`05_takeout_data_analysis.md`)
   - [x] 아키텍처 및 디자인 패턴 설계서 (`00_project_architecture.md`)
-- [ ] Git 저장소 초기화 (PM 사전 승인 대기)
-- [ ] 프로젝트 디렉토리 뼈대 생성 (PM 사전 승인 대기)
+  - [x] 오픈소스(gpth, immich-go) 벤치마크 및 메타데이터 심층 분석서 (`06_opensource_benchmark_analysis.md`)
+- [x] Git 저장소 초기화 (`git init`) 및 `.gitignore`에 `Sample/` 경로 완벽 제외
+- [x] 프로젝트 디렉토리 뼈대 생성 (`src/`, `tests/`, `requirements.txt`)
+- [x] Initial commit 생성 (`a94a683`)
 
 ---
 
