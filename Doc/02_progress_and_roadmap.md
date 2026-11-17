@@ -101,13 +101,14 @@ flowchart LR
 - [x] DB 집계 쿼리 추가: `get_statistics()`, `get_recent_jobs()`, `get_history_summary()` (`src/data/database.py`)
 - [x] 전체 모듈 임포트 검증 완료
 - [x] 단위 테스트 12/12 모두 통과
-
-> **커밋 대기 중** — PM 승인 후 커밋 예정
+- [x] Git 커밋 완료 (`c6bc936`)
 
 ---
 
-### Phase 4: 테스트, 최적화 및 크로스플랫폼 패키징
-- [ ] 샘플 파일(20~30개) 대상 통합 테스트 수행
-- [ ] macOS (.app / .dmg) 빌드 검증
-- [ ] Windows (.exe) 빌드 검증
-- [ ] 최종 사용자 매뉴얼 작성
+### Phase 4: 테스트, 최적화 및 크로스플랫폼 패키징 (완료 — 2026-11-17)
+- [x] OS별 시스템 기본 한글/영문 폰트 스택 최적화 및 폰트 경고 제거 (`src/ui/theme.py`)
+- [x] PyInstaller 빌드 사양서 정의 (`GooglePhotoTakeoutTools.spec`)
+- [x] macOS 단일 실행형 `.app` 번들 원클릭 빌드 스크립트 작성 (`scripts/build_mac.sh`)
+- [x] Windows 단일 실행형 `.exe` 원클릭 빌드 스크립트 작성 (`scripts/build_windows.bat`, `build_windows.ps1`)
+- [x] macOS M시리즈(Apple Silicon arm64) 환경에서 `.app` 번들 실제 빌드 검증 성공 (`dist/GooglePhotoTakeoutTools.app`, 95MB)
+- [x] 개발 환경 및 빌드 가이드 문서 갱신 (`Doc/01_environment_and_build.md`)

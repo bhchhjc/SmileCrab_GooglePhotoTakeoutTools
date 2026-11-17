@@ -79,25 +79,30 @@ pytest tests/
 
 ---
 
-## 5. 배포용 단일 실행 파일 빌드 가이드 (PyInstaller)
+## 5. 배포용 독립 실행 파일 빌드 가이드 (PyInstaller 원클릭 스크립트)
 
-### 5.1. macOS (.app 및 .dmg 번들)
+프로젝트 루트의 `GooglePhotoTakeoutTools.spec` 사양서와 `scripts/` 디렉토리에 플랫폼별 빌드 스크립트가 제공됩니다.
+
+### 5.1. macOS (.app 독립 번들)
 ```bash
-pyinstaller \
-  --noconsole \
-  --onedir \
-  --name "GooglePhotoTakeoutTools" \
-  --windowed \
-  --clean \
-  src/main.py
+# 원클릭 빌드 스크립트 실행
+./scripts/build_mac.sh
+
+# 빌드 산출물 확인 및 실행
+open dist/GooglePhotoTakeoutTools.app
 ```
+* **산출물 위치**: `dist/GooglePhotoTakeoutTools.app`
+* **특징**: Python 환경이 설치되지 않은 macOS(Apple Silicon/Intel) 머신에서도 단독 실행 가능 (약 95MB).
 
 ### 5.2. Windows (.exe 실행 파일)
+**PowerShell 환경:**
 ```powershell
-pyinstaller `
-  --noconsole `
-  --onefile `
-  --name "GooglePhotoTakeoutTools" `
-  --clean `
-  src/main.py
+.\scripts\build_windows.ps1
 ```
+
+**CMD (명령 프롬프트) 환경:**
+```cmd
+scripts\build_windows.bat
+```
+* **산출물 위치**: `dist\GooglePhotoTakeoutTools\GooglePhotoTakeoutTools.exe`
+* **특징**: 콘솔 검은 창 없이 모던 GUI로 바로 시작되며, 필요한 DLL 및 의존성 라이브러리가 자동 번들링됩니다.

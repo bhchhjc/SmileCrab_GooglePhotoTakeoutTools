@@ -54,10 +54,19 @@ class Colors:
     PRESSED       = "#E8EAED"   # 눌렸을 때
 
 
+import sys
+
 # ────────── 폰트 ──────────
 
 class Fonts:
-    FAMILY      = "Arial, 'Noto Sans KR', sans-serif"
+    # OS별 네이티브 시스템 한글/영문 폰트 우선순위 스택
+    if sys.platform == "darwin":
+        FAMILY = '-apple-system, "Apple SD Gothic Neo", "Helvetica Neue", sans-serif'
+    elif sys.platform == "win32":
+        FAMILY = '"Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif'
+    else:
+        FAMILY = '"Noto Sans CJK KR", "Noto Sans KR", sans-serif'
+
     SIZE_TITLE  = 20
     SIZE_H1     = 16
     SIZE_H2     = 14
