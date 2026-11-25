@@ -82,6 +82,43 @@ class TestProcessService(unittest.TestCase):
         self.assertEqual(stats["total_count"], 1)
         self.assertEqual(stats["photo_count"], 1)
 
+    def test_extended_folder_strategies(self):
+        from datetime import datetime
+        from src.core.models import MediaMetadata, MediaType
+
+        dt = datetime(2023, 8, 15, 12, 0, 0)
+        meta = MediaMetadata(
+            camera_make="Samsung",
+            camera_model="Galaxy S23",
+            country_name="대한민국",
+            city_name="서울",
+        )
+
+        # 1. 일자별 정밀 (YEAR_MONTH_DAY)
+        self.service.folder_strategy = FolderStrategy.YEAR_MONTH_DAY
+        p1 = self.service.get_destination_folder(self.out_dir, dt, meta)
+        self.assertEqual(p1, self.out_dir / "2023" / "08" / "15")
+
+        # 2. 기기별 (CAMERA_YEAR_MONTH)
+        self.service.folder_strategy = FolderStrategy.CAMERA_YEAR_MONTH
+        p2 = self.service.get_destination_folder(self.out_dir, dt, meta)
+        self.assertEqual(p2, self.out_dir / "Samsung Galaxy S23" / "2023" / "08")
+
+        # 3. 미디어 유형별 (TYPE_YEAR_MONTH)
+        self.service.folder_strategy = FolderStrategy.TYPE_YEAR_MONTH
+        p3_photo = self.service.get_destination_folder(self.out_dir, dt, meta, media_type=MediaType.PHOTO)
+        self.assertEqual(p3_photo, self.out_dir / "사진" / "2023" / "08")
+
+        # 4. 국가/도시별 (GEO_COUNTRY_CITY)
+        self.service.folder_strategy = FolderStrategy.GEO_COUNTRY_CITY
+        p4 = self.service.get_destination_folder(self.out_dir, dt, meta)
+        self.assertEqual(p4, self.out_dir / "대한민국" / "서울" / "2023" / "08")
+
+        # 5. 원본 앨범명 (ALBUM_NAME)
+        self.service.folder_strategy = FolderStrategy.ALBUM_NAME
+        p5 = self.service.get_destination_folder(self.out_dir, dt, meta, album_name="제주도 여행")
+        self.assertEqual(p5, self.out_dir / "제주도 여행")
+
 
 if __name__ == "__main__":
     unittest.main()

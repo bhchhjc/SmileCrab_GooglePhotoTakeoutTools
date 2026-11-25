@@ -4,9 +4,10 @@ GooglePhotoTakeoutTools - EXIF Writer
 """
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import piexif
 from PIL import Image
@@ -14,6 +15,86 @@ from PIL import Image
 from .models import GeoLocation, MediaMetadata
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_exif_dict(exif_dict: Dict[str, Any]) -> None:
+    """
+    스마트폰(삼성 갤럭시 등) 카메라나 타 소프트웨어에서 EXIF 표준 규격(Undefined 타입)과
+    다르게 잘못 int 또는 str 등으로 기록해 둔 비표준 태그들을 표준 바이트로 정제합니다.
+    """
+    if not isinstance(exif_dict, dict):
+        return
+
+    exif_ifd = exif_dict.get("Exif")
+    if isinstance(exif_ifd, dict):
+        # 41729: SceneType (Undefined, expects bytes e.g. b'\x01')
+        if 41729 in exif_ifd and isinstance(exif_ifd[41729], int):
+            try:
+                exif_ifd[41729] = bytes([exif_ifd[41729]])
+            except Exception:
+                del exif_ifd[41729]
+
+        # 41728: FileSource (Undefined, expects bytes e.g. b'\x03')
+        if 41728 in exif_ifd and isinstance(exif_ifd[41728], int):
+            try:
+                exif_ifd[41728] = bytes([exif_ifd[41728]])
+            except Exception:
+                del exif_ifd[41728]
+
+        # 37121: ComponentsConfiguration (Undefined, expects bytes)
+        if 37121 in exif_ifd and isinstance(exif_ifd[37121], int):
+            try:
+                exif_ifd[37121] = bytes([exif_ifd[37121]])
+            except Exception:
+                del exif_ifd[37121]
+
+        # 37510: UserComment (Undefined, string -> ascii/utf-8 bytes)
+        if 37510 in exif_ifd and isinstance(exif_ifd[37510], str):
+            exif_ifd[37510] = b"ASCII\x00\x00\x00" + exif_ifd[37510].encode("utf-8", "ignore")
+
+        # 36864: ExifVersion (Undefined, str/int -> 4-byte bytes e.g. b"0230")
+        if 36864 in exif_ifd and not isinstance(exif_ifd[36864], (bytes, bytearray)):
+            try:
+                exif_ifd[36864] = str(exif_ifd[36864]).encode("ascii")
+            except Exception:
+                del exif_ifd[36864]
+
+
+def _dump_exif_safely(exif_dict: Dict[str, Any]) -> bytes:
+    """
+    piexif.dump()를 안전하게 실행하며, 비표준 타입 태그나 썸네일 용량 초과 발생 시
+    자동으로 태그를 교정/제거하고 단계적으로 복구 재시도합니다.
+    """
+    _sanitize_exif_dict(exif_dict)
+
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            return piexif.dump(exif_dict)
+        except ValueError as ve:
+            err_msg = str(ve)
+
+            # 1. 썸네일 64KB 초과 에러 시 썸네일 제거 후 재시도
+            if "thumbnail" in err_msg.lower() or "too large" in err_msg.lower():
+                if exif_dict.get("thumbnail") is not None:
+                    exif_dict["thumbnail"] = None
+                    continue
+
+            # 2. 특정 태그 타입 불일치 에러 시 해당 태그 안전 제거 후 재시도
+            # e.g. "41729 in Exif IFD. Got as <class 'int'>"
+            match = re.search(r"(\d+)\s+in\s+(\w+)\s+IFD", err_msg)
+            if match:
+                tag_id = int(match.group(1))
+                ifd_name = match.group(2)
+                if ifd_name in exif_dict and isinstance(exif_dict[ifd_name], dict) and tag_id in exif_dict[ifd_name]:
+                    logger.debug("비표준 EXIF 태그 자동 제거 후 재시도: IFD=%s, Tag=%d", ifd_name, tag_id)
+                    del exif_dict[ifd_name][tag_id]
+                    continue
+
+            # 3. 추가 복구 불가 시 마지막 시도로 필수 메타데이터만 남겨 덤프 시도
+            if attempt == max_retries - 1:
+                raise
+            raise
 
 
 def _to_rational(value: float, precision: int = 100) -> Tuple[int, int]:
@@ -111,16 +192,7 @@ class ExifWriter:
                 modified = True
 
             if modified:
-                try:
-                    exif_bytes = piexif.dump(exif_dict)
-                except ValueError as ve:
-                    # 썸네일 용량이 64KB 초과하여 piexif.dump 실패 시 썸네일 제거 후 재시도
-                    if "thumbnail" in str(ve).lower() or "too large" in str(ve).lower():
-                        exif_dict["thumbnail"] = None
-                        exif_bytes = piexif.dump(exif_dict)
-                    else:
-                        raise
-
+                exif_bytes = _dump_exif_safely(exif_dict)
                 piexif.insert(exif_bytes, str(image_path))
                 return True
 
@@ -129,3 +201,59 @@ class ExifWriter:
         except Exception as e:
             logger.warning("EXIF 주입 실패 [%s]: %s", image_path, e)
             return False
+
+    @staticmethod
+    def extract_camera_info(image_path: Path) -> Tuple[str, str]:
+        """
+        사진 파일(JPEG 등)로부터 카메라 제조사(Make) 및 모델명(Model)을 안전하게 추출합니다.
+        
+        반환:
+            (camera_make, camera_model) 튜플 (정보 없을 경우 빈 문자열 반환)
+        """
+        if not image_path.exists() or not image_path.is_file():
+            return "", ""
+
+        # 1. piexif 기반 빠른 추출 시도
+        try:
+            exif_dict = piexif.load(str(image_path))
+            zeroth = exif_dict.get("0th", {})
+            raw_make = zeroth.get(piexif.ImageIFD.Make)
+            raw_model = zeroth.get(piexif.ImageIFD.Model)
+
+            make = ""
+            if isinstance(raw_make, bytes):
+                make = raw_make.decode("utf-8", "ignore").strip("\x00 \t\r\n")
+            elif raw_make is not None:
+                make = str(raw_make).strip("\x00 \t\r\n")
+
+            model = ""
+            if isinstance(raw_model, bytes):
+                model = raw_model.decode("utf-8", "ignore").strip("\x00 \t\r\n")
+            elif raw_model is not None:
+                model = str(raw_model).strip("\x00 \t\r\n")
+
+            if make or model:
+                return make, model
+        except Exception:
+            pass
+
+        # 2. PIL Image._getexif() 폴백 시도 (HEIC/TIFF 등 타 포맷 대응)
+        try:
+            with Image.open(image_path) as img:
+                exif = img._getexif()
+                if exif:
+                    # Tag 271: Make, Tag 272: Model
+                    raw_make = exif.get(271, "")
+                    raw_model = exif.get(272, "")
+
+                    make = raw_make.decode("utf-8", "ignore") if isinstance(raw_make, bytes) else str(raw_make or "")
+                    model = raw_model.decode("utf-8", "ignore") if isinstance(raw_model, bytes) else str(raw_model or "")
+
+                    make = make.strip("\x00 \t\r\n")
+                    model = model.strip("\x00 \t\r\n")
+                    if make or model:
+                        return make, model
+        except Exception:
+            pass
+
+        return "", ""

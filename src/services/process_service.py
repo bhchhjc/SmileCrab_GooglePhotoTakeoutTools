@@ -6,6 +6,7 @@ Takeout 미디어 파일을 분석/메타데이터 주입/폴더 정리 및 SQLi
 import hashlib
 import logging
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,8 +15,10 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from src.core.exif_writer import ExifWriter
+from src.core.geo_resolver import GeoLanguage, GeoResolver
+from src.core.i18n import t
 from src.core.matcher import DirectoryMetadataIndex, MetadataMatcher
-from src.core.models import MatchResult, MatchType, MediaFile, MediaMetadata
+from src.core.models import MatchResult, MatchType, MediaFile, MediaMetadata, MediaType, GeoLocation
 from src.core.os_sync import OsDateSync
 from src.core.utils import normalize_unicode
 from src.data.repositories.media_repo import MediaRepository
@@ -23,11 +26,55 @@ from src.data.repositories.media_repo import MediaRepository
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_folder_name(name: str) -> str:
+    """OS 파일시스템에서 금지된 특수문자를 안전한 문자로 정제"""
+    if not name:
+        return ""
+    cleaned = re.sub(r'[\\/:*?"<>|]', '_', name.strip())
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned.strip()
+
+
 class FolderStrategy(str, Enum):
     """정리 폴더 계층 구조 규칙"""
-    YEAR_MONTH = "year_month"              # YYYY/MM/ (예: 2023/05/)
-    YEAR_YEAR_MONTH = "year_year_month"    # YYYY/YYYY-MM/ (예: 2023/2023-05/)
-    YEAR_ONLY = "year_only"                # YYYY/ (예: 2023/)
+    YEAR_MONTH = "year_month"                              # YYYY/MM/ (기본값)
+    YEAR_YEAR_MONTH = "year_year_month"                    # YYYY/YYYY-MM/
+    YEAR_ONLY = "year_only"                                # YYYY/
+    YEAR_MONTH_DAY = "year_month_day"                      # YYYY/MM/DD/ (일자별 정밀)
+    CAMERA_YEAR_MONTH = "camera_year_month"                # 촬영기기/YYYY/MM/
+    YEAR_MONTH_CAMERA = "year_month_camera"                # YYYY/MM/촬영기기/
+    TYPE_YEAR_MONTH = "type_year_month"                    # 미디어유형/YYYY/MM/ (사진 vs 동영상)
+    GEO_COUNTRY_STATE_CITY = "geo_country_state_city"      # 국가/시도/시군구/YYYY/MM/
+    GEO_COUNTRY_STATE = "geo_country_state"                # 국가/시도/YYYY/MM/
+    GEO_COUNTRY_CITY = "geo_country_city"                  # 국가/도시/YYYY/MM/
+    GEO_COUNTRY = "geo_country"                            # 국가/YYYY/MM/
+    GEO_COUNTRY_STATE_CITY_ONLY = "geo_country_state_city_only"  # 국가/시도/시군구/
+    GEO_COUNTRY_STATE_ONLY = "geo_country_state_only"      # 국가/시도/
+    GEO_COUNTRY_CITY_ONLY = "geo_country_city_only"        # 국가/도시/
+    GEO_COUNTRY_ONLY = "geo_country_only"                  # 국가/
+    ALBUM_NAME = "album_name"                              # 원본 앨범명/
+
+
+STRATEGY_I18N_KEYS: Dict[FolderStrategy, str] = {
+    FolderStrategy.YEAR_MONTH: "strategies.YEAR_MONTH",
+    FolderStrategy.YEAR_YEAR_MONTH: "strategies.YEAR_YEAR_MONTH",
+    FolderStrategy.YEAR_ONLY: "strategies.YEAR_ONLY",
+    FolderStrategy.YEAR_MONTH_DAY: "strategies.YEAR_MONTH_DAY",
+    FolderStrategy.CAMERA_YEAR_MONTH: "strategies.CAMERA_YEAR_MONTH",
+    FolderStrategy.YEAR_MONTH_CAMERA: "strategies.YEAR_MONTH_CAMERA",
+    FolderStrategy.TYPE_YEAR_MONTH: "strategies.TYPE_YEAR_MONTH",
+    FolderStrategy.GEO_COUNTRY_CITY: "strategies.GEO_COUNTRY_CITY",
+    FolderStrategy.GEO_COUNTRY: "strategies.GEO_COUNTRY",
+    FolderStrategy.ALBUM_NAME: "strategies.ALBUM_NAME",
+}
+
+
+def get_strategy_display_name(strategy: FolderStrategy) -> str:
+    """폴더 전략의 다국어 표시 라벨 반환"""
+    key = STRATEGY_I18N_KEYS.get(strategy)
+    if key:
+        return t(key)
+    return strategy.value
 
 
 class ProcessMode(str, Enum):
@@ -43,6 +90,8 @@ class ProcessSummary:
     processed_count: int = 0
     skipped_duplicate: int = 0
     failed_count: int = 0
+    photo_count: int = 0
+    video_count: int = 0
     total_bytes: int = 0
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -73,26 +122,106 @@ class ProcessService:
         media_repo: MediaRepository,
         folder_strategy: FolderStrategy = FolderStrategy.YEAR_MONTH,
         process_mode: ProcessMode = ProcessMode.COPY,
+        geo_language: GeoLanguage = GeoLanguage.KOREAN,
     ):
         self.media_repo = media_repo
         self.folder_strategy = folder_strategy
         self.process_mode = process_mode
+        self.geo_language = geo_language
         self.matcher = MetadataMatcher()
 
-    def get_destination_folder(self, base_output: Path, dt: Optional[datetime]) -> Path:
-        """선택된 폴더 규칙에 따라 타겟 디렉토리 경로 계산"""
-        if not dt:
-            return base_output / "Unknown_Date"
+    def get_destination_folder(
+        self,
+        base_output: Path,
+        dt: Optional[datetime],
+        meta: Optional[MediaMetadata] = None,
+        media_type: MediaType = MediaType.PHOTO,
+        album_name: str = "",
+    ) -> Path:
+        """선택된 10종 폴더 규칙에 따라 타겟 디렉토리 경로 계산"""
+        year_str = f"{dt.year:04d}" if dt else "Unknown_Year"
+        month_str = f"{dt.month:02d}" if dt else "Unknown_Month"
+        day_str = f"{dt.day:02d}" if dt else "Unknown_Day"
 
-        year_str = f"{dt.year:04d}"
-        month_str = f"{dt.month:02d}"
+        strat = self.folder_strategy
 
-        if self.folder_strategy == FolderStrategy.YEAR_MONTH:
+        if strat == FolderStrategy.YEAR_MONTH:
             return base_output / year_str / month_str
-        elif self.folder_strategy == FolderStrategy.YEAR_YEAR_MONTH:
+        elif strat == FolderStrategy.YEAR_YEAR_MONTH:
             return base_output / year_str / f"{year_str}-{month_str}"
-        elif self.folder_strategy == FolderStrategy.YEAR_ONLY:
+        elif strat == FolderStrategy.YEAR_ONLY:
             return base_output / year_str
+        elif strat == FolderStrategy.YEAR_MONTH_DAY:
+            return base_output / year_str / month_str / day_str
+        elif strat == FolderStrategy.CAMERA_YEAR_MONTH:
+            cam_str = ""
+            if meta:
+                c_make = (meta.camera_make or "").strip()
+                c_model = (meta.camera_model or "").strip()
+                cam_str = f"{c_make} {c_model}".strip() if (c_make or c_model) else ""
+            cam_folder = _sanitize_folder_name(cam_str) or "기타 기기 (Unknown)"
+            return base_output / cam_folder / year_str / month_str
+        elif strat == FolderStrategy.YEAR_MONTH_CAMERA:
+            cam_str = ""
+            if meta:
+                c_make = (meta.camera_make or "").strip()
+                c_model = (meta.camera_model or "").strip()
+                cam_str = f"{c_make} {c_model}".strip() if (c_make or c_model) else ""
+            cam_folder = _sanitize_folder_name(cam_str) or "기타 기기 (Unknown)"
+            return base_output / year_str / month_str / cam_folder
+        elif strat == FolderStrategy.TYPE_YEAR_MONTH:
+            type_folder = "사진" if media_type == MediaType.PHOTO else "동영상"
+            return base_output / type_folder / year_str / month_str
+        elif strat in (
+            FolderStrategy.GEO_COUNTRY_STATE_CITY,
+            FolderStrategy.GEO_COUNTRY_STATE,
+            FolderStrategy.GEO_COUNTRY_CITY,
+            FolderStrategy.GEO_COUNTRY,
+            FolderStrategy.GEO_COUNTRY_STATE_CITY_ONLY,
+            FolderStrategy.GEO_COUNTRY_STATE_ONLY,
+            FolderStrategy.GEO_COUNTRY_CITY_ONLY,
+            FolderStrategy.GEO_COUNTRY_ONLY,
+        ):
+            country = _sanitize_folder_name(meta.country_name if meta else "") or "위치정보없음"
+            state = _sanitize_folder_name(meta.state_name if meta else "")
+            city = _sanitize_folder_name(meta.city_name if meta else "")
+
+            # 특·광역시 등 동어반복 방지
+            if state and city:
+                s_c = state.replace("광역시", "").replace("특별시", "").replace("도", "").replace("주", "")
+                c_c = city.replace("시", "").replace("도심", "")
+                if s_c == c_c:
+                    city = ""
+
+            path = base_output / country
+            if strat in (FolderStrategy.GEO_COUNTRY_STATE_CITY, FolderStrategy.GEO_COUNTRY_STATE_CITY_ONLY):
+                if state:
+                    path = path / state
+                if city:
+                    path = path / city
+            elif strat in (FolderStrategy.GEO_COUNTRY_STATE, FolderStrategy.GEO_COUNTRY_STATE_ONLY):
+                if state:
+                    path = path / state
+                elif city:
+                    path = path / city
+            elif strat in (FolderStrategy.GEO_COUNTRY_CITY, FolderStrategy.GEO_COUNTRY_CITY_ONLY):
+                if city:
+                    path = path / city
+                elif state:
+                    path = path / state
+
+            if strat in (
+                FolderStrategy.GEO_COUNTRY_STATE_CITY,
+                FolderStrategy.GEO_COUNTRY_STATE,
+                FolderStrategy.GEO_COUNTRY_CITY,
+                FolderStrategy.GEO_COUNTRY,
+            ):
+                path = path / year_str / month_str
+
+            return path
+        elif strat == FolderStrategy.ALBUM_NAME:
+            alb = _sanitize_folder_name(album_name) or "미분류 앨범"
+            return base_output / alb
 
         return base_output / year_str / month_str
 
@@ -140,14 +269,26 @@ class ProcessService:
         summary.total_scanned = len(candidates)
 
         # 2. 순차 파이프라인 처리
+        def notify_progress(cur_idx: int, cur_fname: str, cur_status: str):
+            if not progress_callback:
+                return
+            stats = {
+                "processed": summary.processed_count,
+                "skipped": summary.skipped_duplicate,
+                "errors": summary.failed_count,
+            }
+            try:
+                progress_callback(cur_idx, summary.total_scanned, cur_fname, cur_status, stats)
+            except TypeError:
+                progress_callback(cur_idx, summary.total_scanned, cur_fname, cur_status)
+
         for idx, (_, media, match_res, album_name) in enumerate(candidates, 1):
             if should_stop and should_stop():
                 logger.info("작업 중단 요청이 감지되어 파이프라인을 종료합니다.")
                 break
 
             fname = media.normalized_name
-            if progress_callback:
-                progress_callback(idx, summary.total_scanned, fname, "처리 중...")
+            notify_progress(idx, fname, "처리 중...")
 
             try:
                 # 2.1 SHA-256 해시 계산
@@ -157,13 +298,39 @@ class ProcessService:
                 existing = self.media_repo.find_by_hash(file_hash)
                 if existing:
                     summary.skipped_duplicate += 1
-                    if progress_callback:
-                        progress_callback(idx, summary.total_scanned, fname, "중복 파일 스킵")
+                    notify_progress(idx, fname, "중복 파일 스킵")
                     continue
 
-                # 2.3 대상 디렉토리 및 파일명 결정
+                # 2.3 대상 디렉토리 및 메타데이터 선행 결정
                 best_dt = match_res.metadata.best_datetime if match_res.metadata else None
-                target_folder = self.get_destination_folder(output_dir, best_dt)
+                meta = match_res.metadata or MediaMetadata()
+
+                # 2.3.1 카메라 정보 선행 추출 (기기별 폴더 전략용)
+                if not meta.camera_make and not meta.camera_model:
+                    c_make, c_model = ExifWriter.extract_camera_info(media.path)
+                    if c_make:
+                        meta.camera_make = c_make
+                    if c_model:
+                        meta.camera_model = c_model
+
+                # 2.3.2 GPS 역지오코딩 선행 추출 (위치별 폴더 전략용)
+                if not meta.country_name:
+                    geo = meta.geo_data
+                    lat = geo.latitude if geo else None
+                    lon = geo.longitude if geo else None
+                    loc = GeoResolver().resolve(lat, lon, self.geo_language)
+                    meta.country_code = loc.country_code
+                    meta.country_name = loc.country_name
+                    meta.state_name = loc.state_name
+                    meta.city_name = loc.city_name
+
+                target_folder = self.get_destination_folder(
+                    output_dir,
+                    best_dt,
+                    meta=meta,
+                    media_type=media.media_type,
+                    album_name=album_name,
+                )
                 target_folder.mkdir(parents=True, exist_ok=True)
                 dest_file = target_folder / fname
 
@@ -188,23 +355,29 @@ class ProcessService:
                 if best_dt:
                     OsDateSync.sync_file_time(dest_file, best_dt)
 
-                # 2.8 SQLite DB 적재
+                # 2.8 SQLite DB 적재 (사전 추출된 meta 사용)
                 self.media_repo.insert_media(
                     final_path=dest_file,
                     original_path=media.path,
                     file_hash=file_hash,
                     media_file=media,
-                    metadata=match_res.metadata,
+                    metadata=meta,
                     album_name=album_name,
                     status="COMPLETED",
                 )
 
                 summary.processed_count += 1
+                if media.media_type.value == "photo":
+                    summary.photo_count += 1
+                elif media.media_type.value == "video":
+                    summary.video_count += 1
                 summary.total_bytes += media.file_size
+                notify_progress(idx, fname, "완료")
 
             except Exception as e:
                 logger.error("파일 처리 실패 [%s]: %s", media.path, e)
                 summary.failed_count += 1
+                notify_progress(idx, fname, f"오류 발생: {e}")
 
         summary.end_time = datetime.now()
         return summary

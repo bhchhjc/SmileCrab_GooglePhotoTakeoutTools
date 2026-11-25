@@ -56,6 +56,12 @@ class MediaMetadata:
     geo_data: GeoLocation = field(default_factory=GeoLocation)
     people: List[str] = field(default_factory=list)
     is_favorited: bool = False
+    camera_make: str = ""                    # 촬영 기기 제조사 (예: Apple, Samsung)
+    camera_model: str = ""                   # 촬영 기기 모델명 (예: iPhone 13 Pro, SM-S908N)
+    country_code: str = ""                   # 역지오코딩 국가 코드 (예: KR, US, JP)
+    country_name: str = ""                   # 역지오코딩 국가명 (예: 대한민국, South Korea)
+    state_name: str = ""                     # 역지오코딩 주/도명 (예: 경기도, 캘리포니아주, 하부오스트리아주)
+    city_name: str = ""                      # 역지오코딩 도시/지역명 (예: 서울, 곡성군, 할슈타트)
     raw_json: dict = field(default_factory=dict)
 
     @property

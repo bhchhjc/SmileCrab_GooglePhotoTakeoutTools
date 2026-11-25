@@ -32,6 +32,7 @@ hidden_imports = [
     'src.ui.theme',
     'src.ui.workers',
     'src.ui.components.sidebar_widget',
+    'src.ui.components.compare_panel',
     'src.ui.views.dashboard_view',
     'src.ui.views.job_view',
     'src.ui.views.history_view',
@@ -40,7 +41,13 @@ hidden_imports = [
     'src.ui.main_window',
 ]
 
-datas = []
+# 플랫폼별 아이콘 파일 경로
+icon_win = str(PROJECT_ROOT / 'assets' / 'icons' / 'app_icon.ico')
+icon_mac = str(PROJECT_ROOT / 'assets' / 'icons' / 'app_icon.icns')
+
+datas = [
+    ('assets', 'assets'),
+]
 
 a = Analysis(
     ['src/main.py'],
@@ -87,6 +94,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=icon_win if sys.platform.startswith('win') else None,
 )
 
 coll = COLLECT(
@@ -104,11 +112,11 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         coll,
         name='GooglePhotoTakeoutTools.app',
-        icon=None,
+        icon=icon_mac,
         bundle_identifier='com.littleplanet.googlephototakeouttools',
         info_plist={
-            'CFBundleShortVersionString': '0.3.0',
-            'CFBundleVersion': '0.3.0',
+            'CFBundleShortVersionString': '0.9.0',
+            'CFBundleVersion': '0.9.0',
             'NSHighResolutionCapable': 'True',
             'NSRequiresAquaSystemAppearance': 'False',
         },

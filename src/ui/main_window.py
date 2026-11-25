@@ -1,32 +1,32 @@
 """
 main_window.py
 ────────────────────────────────────────────────────────────────
-메인 윈도우 (사이드바 네비게이션 구조)
+메인 윈도우 (Material 3 Navigation Rail + Antigravity 일체형 구조)
 
 레이아웃:
   MainWindow (QMainWindow)
   └── CentralWidget
-      └── RootLayout (QVBoxLayout)
-          ├── TopBar (QFrame)   ← 햄버거 버튼 + 페이지 타이틀
-          └── BodyLayout (QHBoxLayout)
-              ├── SidebarWidget    ← 사이드바 (토글 가능)
-              └── ContentArea
-                  └── ContentStack (QStackedWidget)
-                      ├── [0] DashboardView
-                      ├── [1] JobView
-                      ├── [2] HistoryView
-                      ├── [3] LibraryView
-                      └── [4] SettingsView
+      └── RootLayout (QHBoxLayout)
+          ├── SidebarWidget (M3 Navigation Rail, 76px ↔ 240px)
+          └── ContentStack (QStackedWidget)
+              ├── [0] DashboardView
+              ├── [1] JobView
+              ├── [2] HistoryView
+              ├── [3] LibraryView
+              └── [4] SettingsView
 """
 
+import sys
+from pathlib import Path
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QLabel, QStackedWidget, QPushButton, QSizePolicy,
+    QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QMessageBox,
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut, QCloseEvent, QIcon
 
-from src.ui.theme import MAIN_STYLESHEET, Colors, Fonts
+from src.core.i18n import i18n, t
+from src.data.database import DatabaseManager
+from src.ui.theme import MAIN_STYLESHEET
 from src.ui.components.sidebar_widget import SidebarWidget
 from src.ui.views.dashboard_view import DashboardView
 from src.ui.views.job_view import JobView
@@ -35,29 +35,34 @@ from src.ui.views.library_view import LibraryView
 from src.ui.views.settings_view import SettingsView
 
 
-# 페이지 인덱스 → 타이틀 매핑
-PAGE_TITLES = {
-    0: "대시보드",
-    1: "새 작업",
-    2: "처리 이력",
-    3: "미디어 라이브러리",
-    4: "설정",
-}
-
-
 class MainWindow(QMainWindow):
     """
     앱 메인 윈도우.
-    
-    사이드바 + 콘텐츠 영역으로 구성되며,
-    사이드바의 메뉴 선택에 따라 ContentStack의 페이지를 전환한다.
+    상단 구분선을 없애고 Navigation Rail이 전체 높이를 담당하는 일체형 윈도우.
     """
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("📸 Google Photo Takeout Tools")
-        self.resize(1100, 720)
-        self.setMinimumSize(800, 560)
+        # DB에 저장된 언어 복원 또는 시스템 언어 감지
+        db = DatabaseManager()
+        saved_lang = db.get_setting("app_language")
+        if saved_lang:
+            i18n.set_locale(saved_lang)
+        else:
+            detected = i18n.detect_system_locale()
+            i18n.set_locale(detected)
+
+        self.setWindowTitle(f"🦀 {t('common.app_title', 'Smile Crab [Google Photo Takeout Tools]')}")
+        self.resize(1180, 760)
+        self.setMinimumSize(880, 600)
+
+        # 윈도우 창 아이콘 설정
+        root_dir = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent.parent
+        for icon_name in ("app_icon.png", "app_icon.ico", "app_icon.icns"):
+            icon_file = root_dir / "assets" / "icons" / icon_name
+            if icon_file.exists():
+                self.setWindowIcon(QIcon(str(icon_file)))
+                break
 
         # 전역 스타일시트 적용
         self.setStyleSheet(MAIN_STYLESHEET)
@@ -65,52 +70,37 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._connect_signals()
 
+        i18n.language_changed.connect(self._retranslate_ui)
+
         # 초기 페이지: 대시보드
         self._navigate_to(0)
 
-    # ── UI 초기화 ─────────────────────────────────────────────
+    def _retranslate_ui(self):
+        self.setWindowTitle(f"🦀 {t('common.app_title', 'Smile Crab [Google Photo Takeout Tools]')}")
 
     def _setup_ui(self):
-        """전체 레이아웃 구성."""
         central = QWidget()
         central.setObjectName("CentralWidget")
         self.setCentralWidget(central)
 
-        root_layout = QVBoxLayout(central)
+        # 일체형 수평 레이아웃 (TopBar 제거)
+        root_layout = QHBoxLayout(central)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # ── 상단 TopBar ───────────────────────────────────────
-        self._top_bar = self._build_top_bar()
-        root_layout.addWidget(self._top_bar)
-
-        # ── 바디 (사이드바 + 콘텐츠) ─────────────────────────
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(0)
-
-        # 사이드바
+        # 1. 좌측 M3 Navigation Rail (전체 높이)
         self._sidebar = SidebarWidget()
-        body_layout.addWidget(self._sidebar)
+        root_layout.addWidget(self._sidebar)
 
-        # 콘텐츠 영역
-        content_area = QWidget()
-        content_area.setObjectName("ContentArea")
-        content_area_layout = QVBoxLayout(content_area)
-        content_area_layout.setContentsMargins(0, 0, 0, 0)
-        content_area_layout.setSpacing(0)
-
-        # 콘텐츠 스택
+        # 2. 우측 콘텐츠 스택
         self._stack = QStackedWidget()
         self._stack.setObjectName("ContentStack")
 
-        # 뷰 인스턴스 생성 및 등록
         self._dashboard_view = DashboardView()
         self._job_view       = JobView()
         self._history_view   = HistoryView()
         self._library_view   = LibraryView()
-        self._settings_view  = SettingsView()
+        self._settings_view  = SettingsView(on_db_reset=self._on_db_reset)
 
         self._stack.addWidget(self._dashboard_view)   # index 0
         self._stack.addWidget(self._job_view)         # index 1
@@ -118,48 +108,58 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._library_view)     # index 3
         self._stack.addWidget(self._settings_view)    # index 4
 
-        content_area_layout.addWidget(self._stack)
-        body_layout.addWidget(content_area, stretch=1)
+        root_layout.addWidget(self._stack, stretch=1)
 
-        root_layout.addWidget(body, stretch=1)
+        # ── 단축키 바인딩 (macOS Cmd+W / Cmd+Q, Windows Alt+F4 / Ctrl+W) ──
+        # Cmd+W (macOS) / Ctrl+W (Windows)
+        self._sc_close = QShortcut(QKeySequence("Ctrl+W"), self)
+        self._sc_close.activated.connect(self.close)
 
-    def _build_top_bar(self) -> QFrame:
-        """상단 TopBar 위젯 생성."""
-        bar = QFrame()
-        bar.setObjectName("TopBar")
-        bar.setFixedHeight(56)
+        # Alt+F4 (Windows 표준 창 닫기)
+        self._sc_alt_f4 = QShortcut(QKeySequence("Alt+F4"), self)
+        self._sc_alt_f4.activated.connect(self.close)
 
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 0, 16, 0)
-        layout.setSpacing(12)
+        # Cmd+Q (macOS 앱 종료) / Ctrl+Q (Windows 앱 종료)
+        self._sc_quit = QShortcut(QKeySequence("Ctrl+Q"), self)
+        self._sc_quit.activated.connect(self.close)
 
-        # 햄버거(토글) 버튼
-        self._hamburger_btn = QPushButton("☰")
-        self._hamburger_btn.setObjectName("TopBarHamburger")
-        self._hamburger_btn.setCursor(Qt.PointingHandCursor)
-        self._hamburger_btn.setToolTip("사이드바 열기/닫기")
-        layout.addWidget(self._hamburger_btn)
+    def closeEvent(self, event: QCloseEvent):
+        """프로그램 종료 시 확인 다이얼로그 노출 (진행 중인 작업 보호)"""
+        is_busy = hasattr(self, "_job_view") and getattr(self._job_view, "is_busy", False)
 
-        # 페이지 타이틀 라벨
-        self._page_title = QLabel("대시보드")
-        self._page_title.setObjectName("PageTitle")
-        font = QFont()
-        font.setPointSize(Fonts.SIZE_H1)
-        font.setBold(True)
-        self._page_title.setFont(font)
-        layout.addWidget(self._page_title)
+        if is_busy:
+            title = t("common.quit_busy_title", "작업 진행 중 종료 확인")
+            text = t(
+                "common.quit_busy_msg",
+                "현재 사진 스캔 또는 정리 작업이 진행 중입니다.\n"
+                "지금 프로그램을 종료하면 작업이 즉시 중단되며 일부 파일만 정리될 수 있습니다.\n\n"
+                "정말 프로그램을 종료하시겠습니까?"
+            )
+        else:
+            title = t("common.quit_title", "프로그램 종료 확인")
+            text = t("common.quit_msg", "GooglePhotoTakeoutTools 프로그램을 종료하시겠습니까?")
 
-        layout.addStretch()
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Question if not is_busy else QMessageBox.Warning)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg_box.setDefaultButton(QMessageBox.No)
 
-        return bar
+        yes_btn = msg_box.button(QMessageBox.Yes)
+        if yes_btn:
+            yes_btn.setText(t("common.quit_btn", "종료"))
+        no_btn = msg_box.button(QMessageBox.No)
+        if no_btn:
+            no_btn.setText(t("common.cancel", "취소"))
 
-    # ── 시그널 연결 ───────────────────────────────────────────
+        reply = msg_box.exec()
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
     def _connect_signals(self):
-        """각 컴포넌트 시그널 연결."""
-        # 햄버거 버튼 → 사이드바 토글
-        self._hamburger_btn.clicked.connect(self._sidebar.toggle)
-
         # 사이드바 메뉴 선택 → 페이지 전환
         self._sidebar.nav_changed.connect(self._navigate_to)
 
@@ -167,29 +167,19 @@ class MainWindow(QMainWindow):
         self._dashboard_view.start_job_requested.connect(
             lambda: self._navigate_to(1)
         )
+        # 대시보드 → "전체 이력 보기" 버튼 → 처리 이력 페이지로 이동
+        self._dashboard_view.view_history_requested.connect(
+            lambda: self._navigate_to(2)
+        )
 
-        # 작업 완료 시 → 대시보드 갱신 + 이력 갱신
+        # 작업 완료 시 → 대시보드 / 이력 / 라이브러리 갱신
         self._job_view.job_completed.connect(self._on_job_completed)
 
-    # ── 내비게이션 ────────────────────────────────────────────
-
     def _navigate_to(self, page_idx: int):
-        """
-        지정된 페이지 인덱스로 콘텐츠 스택 전환.
-        
-        Args:
-            page_idx: 0=대시보드, 1=새작업, 2=처리이력, 3=미디어, 4=설정
-        """
-        # 콘텐츠 스택 전환
         self._stack.setCurrentIndex(page_idx)
-
-        # 상단 타이틀 갱신
-        self._page_title.setText(PAGE_TITLES.get(page_idx, ""))
-
-        # 사이드바 버튼 상태 동기화 (외부에서 navigate_to 호출 시)
         self._sidebar.set_active_page(page_idx)
 
-        # 페이지 진입 시 필요한 데이터 갱신
+        # 페이지 진입 시 데이터 자동 갱신
         if page_idx == 0:
             self._dashboard_view.refresh()
         elif page_idx == 2:
@@ -197,9 +187,12 @@ class MainWindow(QMainWindow):
         elif page_idx == 3:
             self._library_view.refresh()
 
-    # ── 이벤트 핸들러 ─────────────────────────────────────────
-
     def _on_job_completed(self):
-        """작업 완료 시 대시보드/이력 뷰 데이터 갱신."""
         self._dashboard_view.refresh()
         self._history_view.refresh()
+        self._library_view.refresh()
+
+    def _on_db_reset(self):
+        self._dashboard_view.refresh()
+        self._history_view.refresh()
+        self._library_view.refresh()

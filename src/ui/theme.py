@@ -15,43 +15,60 @@ theme.py
   - 활성 메뉴 텍스트/아이콘 : #1A73E8
 """
 
+from pathlib import Path
+
+_ASSETS_ICONS_DIR = Path(__file__).resolve().parent.parent.parent / "assets" / "icons"
+ICON_RADIO_UNCHECKED = str(_ASSETS_ICONS_DIR / "radio_unchecked.svg").replace("\\", "/")
+ICON_RADIO_CHECKED = str(_ASSETS_ICONS_DIR / "radio_checked.svg").replace("\\", "/")
+ICON_RADIO_DISABLED = str(_ASSETS_ICONS_DIR / "radio_disabled.svg").replace("\\", "/")
+ICON_CHECKBOX_UNCHECKED = str(_ASSETS_ICONS_DIR / "checkbox_unchecked.svg").replace("\\", "/")
+ICON_CHECKBOX_CHECKED = str(_ASSETS_ICONS_DIR / "checkbox_checked.svg").replace("\\", "/")
+ICON_CHECKBOX_DISABLED = str(_ASSETS_ICONS_DIR / "checkbox_disabled.svg").replace("\\", "/")
+
+
 # ────────── 색상 상수 ──────────
 
 class Colors:
-    """라이트 모드 색상 토큰."""
+    """라이트 모드 색상 토큰 (Samsung One UI 9.5 테마)."""
 
     # 배경
-    BG_APP       = "#F0F2F5"   # 앱 전체 배경
+    BG_APP       = "#F4F6F9"   # 앱 전체 배경 (부드러운 블루그레이 미색)
     BG_SIDEBAR   = "#FFFFFF"   # 사이드바 배경
     BG_CARD      = "#FFFFFF"   # 카드/패널 배경
     BG_TOPBAR    = "#FFFFFF"   # 상단 바 배경
     BG_INPUT     = "#FFFFFF"   # 입력 필드 배경
 
-    # 액센트
-    ACCENT       = "#1A73E8"   # 주요 액센트 (Google Blue)
-    ACCENT_HOVER = "#1557B0"   # 호버 상태
-    ACCENT_LIGHT = "#E8F0FE"   # 액센트 연한 배경 (활성 메뉴)
+    # 액센트 (Samsung One UI Signature Cobalt Blue)
+    ACCENT       = "#0072DE"   # 주요 액센트 (One UI Blue)
+    ACCENT_HOVER = "#005EB8"   # 호버 상태
+    ACCENT_LIGHT = "#E8F2FD"   # 액센트 연한 배경 (활성 선택)
 
     # 텍스트
-    TEXT_PRIMARY   = "#202124"   # 본문 텍스트
-    TEXT_SECONDARY = "#5F6368"   # 설명, 힌트
-    TEXT_ACCENT    = "#1A73E8"   # 강조 텍스트 (링크 등)
+    TEXT_PRIMARY   = "#1C1D1F"   # 본문 텍스트 (차분한 다크)
+    TEXT_SECONDARY = "#6C757D"   # 설명, 힌트
+    TEXT_ACCENT    = "#0072DE"   # 강조 텍스트 (링크 등)
     TEXT_ON_ACCENT = "#FFFFFF"   # 액센트 배경 위 텍스트
 
     # 상태
-    SUCCESS = "#34A853"   # 성공 (Google Green)
-    WARNING = "#FBBC04"   # 경고 (Google Yellow)
-    ERROR   = "#EA4335"   # 오류 (Google Red)
-    INFO    = "#1A73E8"   # 정보
+    SUCCESS = "#12B886"   # 성공 (One UI Soft Green)
+    WARNING = "#F59F00"   # 경고
+    ERROR   = "#E03131"   # 오류 (One UI Red)
+    INFO    = "#0072DE"   # 정보
+
+    # One UI 인디케이터
+    M3_SURFACE         = "#F8F9FA"   # Rail 배경
+    M3_INDICATOR       = "#E1EDFB"   # One UI 소프트 블루 알약 배경
+    M3_ON_INDICATOR    = "#0050A0"   # 알약 내부 활성 텍스트/아이콘 (Deep Blue)
+    M3_HOVER           = "#ECEFF4"   # 호버 배경
 
     # 구분선 / 테두리
-    BORDER        = "#E8EAED"   # 기본 테두리
-    BORDER_FOCUS  = "#1A73E8"   # 포커스 시 테두리
-    DIVIDER       = "#E0E0E0"   # 구분선
+    BORDER        = "#E5E8EB"   # 기본 테두리
+    BORDER_FOCUS  = "#0072DE"   # 포커스 시 테두리
+    DIVIDER       = "#ECEFF1"   # 구분선
 
     # 호버 / 눌림
-    HOVER         = "#F1F3F4"   # 일반 호버
-    PRESSED       = "#E8EAED"   # 눌렸을 때
+    HOVER         = "#F1F3F6"   # 일반 호버
+    PRESSED       = "#E4E8EE"   # 눌렸을 때
 
 
 import sys
@@ -61,7 +78,7 @@ import sys
 class Fonts:
     # OS별 네이티브 시스템 한글/영문 폰트 우선순위 스택
     if sys.platform == "darwin":
-        FAMILY = '-apple-system, "Apple SD Gothic Neo", "Helvetica Neue", sans-serif'
+        FAMILY = '"Apple SD Gothic Neo", "Helvetica Neue", "Arial", sans-serif'
     elif sys.platform == "win32":
         FAMILY = '"Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif'
     else:
@@ -82,6 +99,11 @@ QWidget {{
     font-family: {Fonts.FAMILY};
     font-size: {Fonts.SIZE_BODY}px;
     color: {Colors.TEXT_PRIMARY};
+    background-color: transparent;
+}}
+
+QLabel {{
+    border: none;
     background-color: transparent;
 }}
 
@@ -120,97 +142,78 @@ QScrollBar::handle:horizontal:hover {{
 }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 
-/* ── 사이드바 ── */
-#Sidebar {{
-    background-color: {Colors.BG_SIDEBAR};
+/* ── Material 3 Navigation Rail ── */
+#NavRail {{
+    background-color: {Colors.M3_SURFACE};
     border-right: 1px solid {Colors.BORDER};
 }}
 
-/* ── 사이드바 앱 타이틀 ── */
-#SidebarTitle {{
-    color: {Colors.TEXT_PRIMARY};
-    font-size: {Fonts.SIZE_H1}px;
-    font-weight: bold;
-    padding-left: 4px;
-}}
-#SidebarLogo {{
-    font-size: 22px;
-}}
-
-/* ── 사이드바 햄버거 버튼 ── */
-#HamburgerButton {{
+#RailToggleBtn {{
     background-color: transparent;
     border: none;
+    border-radius: 18px;
     font-size: 20px;
     color: {Colors.TEXT_SECONDARY};
-    padding: 6px;
-    border-radius: 6px;
+    padding: 0px;
+    margin: 0px;
     min-width: 36px;
     max-width: 36px;
     min-height: 36px;
     max-height: 36px;
 }}
-#HamburgerButton:hover {{
-    background-color: {Colors.HOVER};
+#RailToggleBtn:hover {{
+    background-color: {Colors.M3_HOVER};
     color: {Colors.TEXT_PRIMARY};
-}}
-#HamburgerButton:pressed {{
-    background-color: {Colors.PRESSED};
 }}
 
-/* ── 사이드바 내비게이션 버튼 (일반) ── */
-#NavButton {{
+/* M3 컴팩트 레일 아이템 (76px 모드) */
+#CompactRailItem {{
     background-color: transparent;
     border: none;
-    border-radius: 8px;
-    text-align: left;
-    padding: 10px 14px;
-    color: {Colors.TEXT_SECONDARY};
-    font-size: {Fonts.SIZE_BODY}px;
-    font-weight: 500;
-    margin: 1px 8px;
+    border-radius: 16px;
+    padding: 0px;
+    margin: 3px 6px;
 }}
-#NavButton:hover {{
-    background-color: {Colors.HOVER};
-    color: {Colors.TEXT_PRIMARY};
+#CompactRailItem:hover {{
+    background-color: rgba(0, 0, 0, 0.04);
 }}
-#NavButton:checked {{
-    background-color: {Colors.ACCENT_LIGHT};
-    color: {Colors.ACCENT};
-    font-weight: bold;
+
+/* M3 확장 드로어 아이템 (240px 모드) */
+#ExpandedRailItem {{
+    background-color: transparent;
+    border: none;
+    border-radius: 24px;
+    padding: 0px;
+    margin: 3px 12px;
+}}
+#ExpandedRailItem:hover {{
+    background-color: rgba(0, 0, 0, 0.04);
+}}
+#ExpandedRailItem:checked {{
+    background-color: #D3E3FD;
 }}
 
 /* ── 사이드바 구분선 ── */
 #SidebarDivider {{
     background-color: {Colors.DIVIDER};
     max-height: 1px;
-    margin: 6px 16px;
+    margin: 8px 16px;
 }}
 
-/* ── 상단 바 ── */
-#TopBar {{
-    background-color: {Colors.BG_TOPBAR};
-    border-bottom: 1px solid {Colors.BORDER};
-}}
-#TopBarHamburger {{
+/* ── 페이지 상단 통합 헤더 (Antigravity 스타일 일체형) ── */
+#PageHeaderContainer {{
     background-color: transparent;
-    border: none;
-    font-size: 20px;
-    color: {Colors.TEXT_SECONDARY};
-    padding: 6px;
-    border-radius: 6px;
-    min-width: 36px;
-    max-width: 36px;
-    min-height: 36px;
-    max-height: 36px;
+    padding: 20px 32px 4px 32px;
 }}
-#TopBarHamburger:hover {{
-    background-color: {Colors.HOVER};
-}}
-#PageTitle {{
-    font-size: {Fonts.SIZE_H1}px;
-    font-weight: bold;
+#PageHeaderTitle {{
+    font-size: 22px;
+    font-weight: 800;
     color: {Colors.TEXT_PRIMARY};
+}}
+#PageHeaderSubtitle {{
+    font-size: 12px;
+    color: {Colors.TEXT_SECONDARY};
+    padding-top: 2px;
 }}
 
 /* ── 콘텐츠 영역 ── */
@@ -218,32 +221,64 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
     background-color: {Colors.BG_APP};
 }}
 
-/* ── 카드 ── */
+/* ── 카드 (One UI 9.5 Focus Block) ── */
 #Card {{
     background-color: {Colors.BG_CARD};
     border: 1px solid {Colors.BORDER};
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 16px;
+    padding: 14px 18px;
 }}
 
 /* ── 통계 카드 (대시보드) ── */
 #StatCard {{
     background-color: {Colors.BG_CARD};
     border: 1px solid {Colors.BORDER};
-    border-radius: 12px;
-    padding: 20px 24px;
+    border-radius: 14px;
+    padding: 12px 16px;
 }}
 #StatCardValue {{
-    font-size: 28px;
+    font-size: 22px;
     font-weight: bold;
     color: {Colors.TEXT_PRIMARY};
 }}
 #StatCardLabel {{
-    font-size: {Fonts.SIZE_SMALL}px;
+    font-size: {Fonts.SIZE_BODY}px;
+    font-weight: 600;
+    color: {Colors.TEXT_PRIMARY};
+}}
+#StatCardDesc {{
+    font-size: 11px;
     color: {Colors.TEXT_SECONDARY};
+    padding-top: 2px;
 }}
 #StatCardIcon {{
-    font-size: 28px;
+    font-size: 24px;
+}}
+
+/* ── One UI 9.5 마스터-디테일 서브 내비게이션 ── */
+#OneUISubNav {{
+    background-color: #FAFBFD;
+    border-right: 1px solid {Colors.BORDER};
+}}
+#OneUINavItem {{
+    background-color: transparent;
+    border: none;
+    border-radius: 12px;
+    text-align: left;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #495057;
+    margin: 2px 6px;
+}}
+#OneUINavItem:hover {{
+    background-color: #EEF2F6;
+    color: {Colors.TEXT_PRIMARY};
+}}
+#OneUINavItem:checked {{
+    background-color: {Colors.ACCENT_LIGHT};
+    color: {Colors.ACCENT};
+    font-weight: bold;
 }}
 
 /* ── 섹션 타이틀 ── */
@@ -254,45 +289,45 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
     padding-bottom: 4px;
 }}
 
-/* ── Primary 버튼 ── */
+/* ── Primary 버튼 (One UI 9.5) ── */
 #PrimaryButton {{
     background-color: {Colors.ACCENT};
-    color: {Colors.TEXT_ON_ACCENT};
+    color: #FFFFFF;
     border: none;
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-size: {Fonts.SIZE_BODY}px;
+    border-radius: 10px;
+    padding: 5px 16px;
+    font-size: 12px;
     font-weight: bold;
-    min-height: 40px;
+    min-height: 30px;
 }}
 #PrimaryButton:hover {{
     background-color: {Colors.ACCENT_HOVER};
 }}
 #PrimaryButton:pressed {{
-    background-color: #0D47A1;
+    background-color: #004B99;
 }}
 #PrimaryButton:disabled {{
-    background-color: {Colors.BORDER};
-    color: {Colors.TEXT_SECONDARY};
+    background-color: #E9ECEF;
+    color: #ADB5BD;
 }}
 
-/* ── Secondary 버튼 ── */
+/* ── Secondary 버튼 (One UI 9.5) ── */
 #SecondaryButton {{
     background-color: transparent;
     color: {Colors.ACCENT};
     border: 1px solid {Colors.ACCENT};
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-size: {Fonts.SIZE_BODY}px;
-    font-weight: bold;
-    min-height: 40px;
+    border-radius: 10px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    min-height: 28px;
 }}
 #SecondaryButton:hover {{
     background-color: {Colors.ACCENT_LIGHT};
 }}
 #SecondaryButton:disabled {{
-    border-color: {Colors.BORDER};
-    color: {Colors.TEXT_SECONDARY};
+    border-color: #E9ECEF;
+    color: #ADB5BD;
 }}
 
 /* ── 위험 버튼 (취소/중단) ── */
@@ -300,26 +335,72 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
     background-color: transparent;
     color: {Colors.ERROR};
     border: 1px solid {Colors.ERROR};
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-size: {Fonts.SIZE_BODY}px;
+    border-radius: 10px;
+    padding: 4px 12px;
+    font-size: 12px;
     font-weight: bold;
-    min-height: 40px;
+    min-height: 28px;
 }}
 #DangerButton:hover {{
-    background-color: #FFEBEE;
+    background-color: #FFF5F5;
 }}
 
-/* ── 입력 필드 ── */
-QLineEdit, QTextEdit, QPlainTextEdit {{
+/* ── 다이얼로그 및 메시지 박스 (One UI 9.5) ── */
+QMessageBox, QDialog {{
+    background-color: #FFFFFF;
+}}
+QMessageBox QLabel {{
+    color: {Colors.TEXT_PRIMARY};
+    font-size: 13px;
+}}
+QMessageBox QPushButton {{
+    background-color: #F1F3F5;
+    color: #212529;
+    border: 1px solid #CED4DA;
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 64px;
+    min-height: 26px;
+}}
+QMessageBox QPushButton:hover {{
+    background-color: #E9ECEF;
+}}
+QMessageBox QPushButton:default {{
+    background-color: {Colors.ACCENT};
+    color: #FFFFFF;
+    border: none;
+}}
+QMessageBox QPushButton:default:hover {{
+    background-color: {Colors.ACCENT_HOVER};
+}}
+
+/* ── 한 줄 입력 필드 (One UI 9.5) ── */
+QLineEdit {{
     background-color: {Colors.BG_INPUT};
     border: 1px solid {Colors.BORDER};
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 4px 10px;
+    color: {Colors.TEXT_PRIMARY};
+    min-height: 24px;
+    max-height: 36px;
+    selection-background-color: {Colors.ACCENT_LIGHT};
+}}
+QLineEdit:focus {{
+    border-color: {Colors.ACCENT};
+}}
+
+/* ── 여러 줄 텍스트 및 콘솔 영역 ── */
+QTextEdit, QPlainTextEdit {{
+    background-color: {Colors.BG_INPUT};
+    border: 1px solid {Colors.BORDER};
+    border-radius: 8px;
+    padding: 6px 10px;
     color: {Colors.TEXT_PRIMARY};
     selection-background-color: {Colors.ACCENT_LIGHT};
 }}
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
+QTextEdit:focus, QPlainTextEdit:focus {{
     border-color: {Colors.ACCENT};
 }}
 
@@ -328,9 +409,10 @@ QComboBox {{
     background-color: {Colors.BG_INPUT};
     border: 1px solid {Colors.BORDER};
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 4px 10px;
     color: {Colors.TEXT_PRIMARY};
-    min-height: 36px;
+    min-height: 24px;
+    max-height: 32px;
 }}
 QComboBox:focus {{
     border-color: {Colors.ACCENT};
@@ -348,38 +430,46 @@ QComboBox QAbstractItemView {{
     padding: 4px;
 }}
 
-/* ── 라디오 버튼 ── */
+/* ── 라디오 버튼 (Material 3 스타일) ── */
 QRadioButton {{
     color: {Colors.TEXT_PRIMARY};
     spacing: 8px;
+    font-size: 13px;
+    background: transparent;
 }}
 QRadioButton::indicator {{
     width: 18px;
     height: 18px;
-    border-radius: 9px;
-    border: 2px solid {Colors.BORDER};
-    background-color: {Colors.BG_INPUT};
+    border: none;
+    background: transparent;
+    image: url({ICON_RADIO_UNCHECKED});
 }}
 QRadioButton::indicator:checked {{
-    border-color: {Colors.ACCENT};
-    background-color: {Colors.ACCENT};
+    image: url({ICON_RADIO_CHECKED});
+}}
+QRadioButton::indicator:disabled {{
+    image: url({ICON_RADIO_DISABLED});
 }}
 
-/* ── 체크박스 ── */
+/* ── 체크박스 (Material 3 스타일) ── */
 QCheckBox {{
     color: {Colors.TEXT_PRIMARY};
     spacing: 8px;
+    font-size: 13px;
+    background: transparent;
 }}
 QCheckBox::indicator {{
     width: 18px;
     height: 18px;
-    border-radius: 4px;
-    border: 2px solid {Colors.BORDER};
-    background-color: {Colors.BG_INPUT};
+    border: none;
+    background: transparent;
+    image: url({ICON_CHECKBOX_UNCHECKED});
 }}
 QCheckBox::indicator:checked {{
-    border-color: {Colors.ACCENT};
-    background-color: {Colors.ACCENT};
+    image: url({ICON_CHECKBOX_CHECKED});
+}}
+QCheckBox::indicator:disabled {{
+    image: url({ICON_CHECKBOX_DISABLED});
 }}
 
 /* ── 프로그레스바 ── */
@@ -395,26 +485,95 @@ QProgressBar::chunk {{
     border-radius: 6px;
 }}
 
-/* ── 테이블 ── */
-QTableWidget {{
+/* ── 테이블 및 트리 뷰 (One UI 9.0 스타일) ── */
+QTableWidget, QTreeWidget {{
     background-color: {Colors.BG_CARD};
     border: 1px solid {Colors.BORDER};
-    border-radius: 8px;
+    border-radius: 12px;
     gridline-color: {Colors.BORDER};
     selection-background-color: {Colors.ACCENT_LIGHT};
-    selection-color: {Colors.TEXT_PRIMARY};
+    selection-color: {Colors.ACCENT};
 }}
 QTableWidget::item {{
-    padding: 8px;
+    padding: 6px 8px;
+}}
+QTreeWidget::item {{
+    height: 28px;
+    padding: 0px 4px;
+    border-bottom: 1px solid #F8F9FA;
+}}
+QTreeWidget::item:hover {{
+    background-color: #EEF2F6;
+}}
+QTreeWidget::item:selected {{
+    background-color: {Colors.ACCENT_LIGHT};
+    color: {Colors.ACCENT};
+    font-weight: bold;
 }}
 QHeaderView::section {{
     background-color: {Colors.BG_APP};
     border: none;
+    border-right: 1px solid {Colors.BORDER};
     border-bottom: 1px solid {Colors.BORDER};
-    padding: 10px 8px;
+    padding: 8px 6px;
     font-weight: bold;
     color: {Colors.TEXT_SECONDARY};
     font-size: {Fonts.SIZE_SMALL}px;
+}}
+QHeaderView::section:hover {{
+    background-color: #E8EAED;
+}}
+QHeaderView::section:horizontal {{
+    border-right: 1px solid {Colors.BORDER};
+    border-bottom: 1px solid {Colors.BORDER};
+    text-align: center;
+}}
+QHeaderView::section:vertical {{
+    border-right: 1px solid {Colors.BORDER};
+    border-bottom: 1px solid {Colors.BORDER};
+    text-align: left;
+    padding-left: 8px;
+    padding-right: 8px;
+}}
+
+/* ── 스크롤바 (One UI 9.5 슬림 스크롤바) ── */
+QScrollBar:vertical {{
+    border: none;
+    background: transparent;
+    width: 6px;
+    margin: 0px;
+}}
+QScrollBar::handle:vertical {{
+    background: #CED4DA;
+    min-height: 24px;
+    border-radius: 3px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: #ADB5BD;
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    border: none;
+    background: none;
+    height: 0px;
+}}
+QScrollBar:horizontal {{
+    border: none;
+    background: transparent;
+    height: 6px;
+    margin: 0px;
+}}
+QScrollBar::handle:horizontal {{
+    background: #CED4DA;
+    min-width: 24px;
+    border-radius: 3px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: #ADB5BD;
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    border: none;
+    background: none;
+    width: 0px;
 }}
 
 /* ── 라벨 (보조 텍스트) ── */
@@ -433,7 +592,7 @@ QFrame[frameShape="4"] {{
     background-color: #F8F9FA;
     border: 1px solid {Colors.BORDER};
     border-radius: 8px;
-    font-family: 'Courier New', monospace;
+    font-family: Menlo, Monaco, "Courier New", monospace;
     font-size: {Fonts.SIZE_SMALL}px;
     color: {Colors.TEXT_PRIMARY};
     padding: 8px;

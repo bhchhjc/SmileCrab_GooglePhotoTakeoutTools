@@ -70,6 +70,10 @@ class JsonParser:
         # 5. 즐겨찾기(favorited) 여부
         is_favorited = bool(data.get("favorited", False))
 
+        # 6. 카메라 기기 정보 추출 (JSON에 명시된 경우)
+        camera_make = normalize_unicode(str(data.get("cameraMake") or data.get("deviceMake") or "")).strip()
+        camera_model = normalize_unicode(str(data.get("cameraModel") or data.get("deviceModel") or "")).strip()
+
         return MediaMetadata(
             title=title,
             description=description,
@@ -80,6 +84,8 @@ class JsonParser:
             geo_data=geo_location,
             people=people_list,
             is_favorited=is_favorited,
+            camera_make=camera_make,
+            camera_model=camera_model,
             raw_json=data,
         )
 

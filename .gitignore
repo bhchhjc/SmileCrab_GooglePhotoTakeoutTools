@@ -60,8 +60,11 @@ venv.bak/
 
 # SQLite databases & temp files
 *.db
+*.db-*
 *.sqlite3
 *.log
+data/
+scratch/
 
 # Operating System Files
 .DS_Store
