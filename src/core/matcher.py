@@ -71,7 +71,12 @@ class MetadataMatcher:
     def __init__(self, index: Optional[DirectoryMetadataIndex] = None):
         self.index = index
 
-    def match(self, media_file: MediaFile, index: Optional[DirectoryMetadataIndex] = None) -> MatchResult:
+    def match(
+        self,
+        media_file: MediaFile,
+        index: Optional[DirectoryMetadataIndex] = None,
+        allow_filename_fallback: bool = True,
+    ) -> MatchResult:
         """
         단일 MediaFile에 대해 최적의 JSON 메타데이터를 찾아 MatchResult로 반환합니다.
         """
@@ -180,16 +185,17 @@ class MetadataMatcher:
                     return MatchResult(media_file, target_json, MatchType.TRUNCATED_PREFIX, meta)
 
         # ----------------------------------------------------
-        # 6단계: Fallback - 파일명 날짜 정규식 파싱
+        # 6단계: Fallback - 파일명 날짜 정규식 파싱 (허용된 경우에만)
         # ----------------------------------------------------
-        extracted_dt = extract_datetime_from_filename(filename)
-        if extracted_dt:
-            fallback_meta = MediaMetadata(
-                title=filename,
-                photo_taken_time=extracted_dt,
-                photo_taken_timestamp=int(extracted_dt.timestamp()),
-            )
-            return MatchResult(media_file, None, MatchType.FALLBACK_FILENAME, fallback_meta)
+        if allow_filename_fallback:
+            extracted_dt = extract_datetime_from_filename(filename)
+            if extracted_dt:
+                fallback_meta = MediaMetadata(
+                    title=filename,
+                    photo_taken_time=extracted_dt,
+                    photo_taken_timestamp=int(extracted_dt.timestamp()),
+                )
+                return MatchResult(media_file, None, MatchType.FALLBACK_FILENAME, fallback_meta)
 
         # 모든 전략 실패
         return MatchResult(media_file, None, MatchType.NONE, None)

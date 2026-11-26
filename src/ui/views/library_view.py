@@ -38,6 +38,7 @@ from src.ui.components.reorganize_dialog import ReorganizeDialog
 from src.ui.components.batch_rename_dialog import BatchRenameDialog
 from src.ui.components.geo_relabel_dialog import GeoRelabelDialog
 from src.ui.components.treemap_dialog import TreemapDialog
+from src.ui.components.media_edit_dialog import MediaEditDialog
 from src.ui.workers import LibraryLoaderWorker, group_media_items, GroupReorderWorker
 from src.core.geo_resolver import GeoLanguage, GeoResolver
 from src.core.i18n import i18n, t
@@ -123,6 +124,58 @@ class LibraryView(QWidget):
             parent=self.window(),
         )
         dialog.exec()
+
+    def _open_edit_dialog(self, data: Dict[str, Any], tree_item: Optional[QTreeWidgetItem] = None):
+        """개별 미디어 메타데이터 통합 편집 다이얼로그를 엽니다."""
+        if not data:
+            return
+        dialog = MediaEditDialog(data, db_manager=self._db, parent=self.window())
+        if dialog.exec() == QDialog.Accepted and dialog.updated_item:
+            updated = dialog.updated_item
+            self._compare_panel.set_media_data(updated)
+
+            if self._cached_valid_results is not None:
+                for idx, item in enumerate(self._cached_valid_results):
+                    if item.get("id") == updated.get("id"):
+                        self._cached_valid_results[idx] = updated
+                        break
+
+            group_by = self._group_combo.currentData() or "date"
+            if group_by in ("folder", "album") and tree_item is not None:
+                self._apply_updated_item_to_tree_node(tree_item, updated)
+            elif self._cached_valid_results is not None:
+                self._render_groups_from_cache()
+            else:
+                self.refresh_data()
+
+            fname = updated.get("file_name") or ""
+            self._count_label.setText(
+                f"✅ '{fname}' {t('library.msg_metadata_updated', '메타데이터가 갱신되었습니다.')}"
+            )
+
+    def _apply_updated_item_to_tree_node(self, child: QTreeWidgetItem, it: Dict[str, Any]):
+        """단일 트리 노드의 표시 텍스트와 UserRole 데이터를 즉시 갱신"""
+        child.setText(1, it.get("taken_at") or "-")
+        make = (it.get("camera_make") or "").strip()
+        model = (it.get("camera_model") or "").strip()
+        cam_str = f"{make} {model}".strip() if (make or model) else "-"
+        child.setText(2, cam_str)
+
+        lat = it.get("latitude") or 0.0
+        lon = it.get("longitude") or 0.0
+        if lat != 0.0 or lon != 0.0:
+            c_name = (it.get("country_name") or "").strip()
+            state = (it.get("state_name") or "").strip()
+            city = (it.get("city_name") or "").strip()
+            parts = [p for p in (c_name, state, city) if p] if self._show_3tier else [p for p in (c_name, city) if p]
+            loc_txt = (" > " if self._show_3tier else " ").join(parts)
+            child.setText(5, f"📍 [{lat:.4f}, {lon:.4f}] {loc_txt}".strip())
+            child.setForeground(5, QColor(Colors.ACCENT))
+        else:
+            child.setText(5, "-")
+            child.setForeground(5, QColor(Colors.TEXT_PRIMARY))
+
+        child.setData(0, Qt.UserRole, it)
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -342,6 +395,7 @@ class LibraryView(QWidget):
         self._compare_panel = ComparePanel()
         self._compare_panel.close_requested.connect(self._close_compare_panel)
         self._compare_panel.location_tier_changed.connect(self._on_panel_location_tier_changed)
+        self._compare_panel.edit_requested.connect(lambda data: self._open_edit_dialog(data))
         self._compare_panel.setVisible(False)
         self._splitter.addWidget(self._compare_panel)
 
@@ -832,6 +886,10 @@ class LibraryView(QWidget):
             reveal_text = t("library.ctx_open_file_loc", default_reveal).format(fname=fname)
             act_reveal = menu.addAction(f"🔍 {reveal_text}")
             act_reveal.triggered.connect(lambda: self._reveal_file_in_os(f_path))
+
+            # 2. 메타데이터 수정 (촬영 일시 / GPS / 설명 / 촬영 기기)
+            act_edit = menu.addAction(f"✏️ {t('library.ctx_edit_metadata', '메타데이터 수정...')}")
+            act_edit.triggered.connect(lambda: self._open_edit_dialog(data, item))
 
             menu.addSeparator()
 

@@ -52,14 +52,23 @@ class JsonParser:
         # 2. creationTime 파싱
         created_time, created_ts = cls._extract_time_info(data.get("creationTime"))
 
-        # 3. GPS 위치 정보 파싱 (geoData 우선, 없으면 geoDataExif 참조)
-        geo_dict = data.get("geoData") or data.get("geoDataExif") or {}
-        if not isinstance(geo_dict, dict):
-            geo_dict = {}
+        # 3. GPS 위치 정보 파싱 (geoData 우선, (0.0, 0.0)이면 geoDataExif 폴백 참조)
+        geo_data = data.get("geoData") if isinstance(data.get("geoData"), dict) else {}
+        geo_exif = data.get("geoDataExif") if isinstance(data.get("geoDataExif"), dict) else {}
+
+        lat = float(geo_data.get("latitude") or 0.0)
+        lon = float(geo_data.get("longitude") or 0.0)
+        alt = float(geo_data.get("altitude") or 0.0)
+
+        if lat == 0.0 and lon == 0.0 and geo_exif:
+            lat = float(geo_exif.get("latitude") or 0.0)
+            lon = float(geo_exif.get("longitude") or 0.0)
+            alt = float(geo_exif.get("altitude") or 0.0)
+
         geo_location = GeoLocation(
-            latitude=float(geo_dict.get("latitude") or 0.0),
-            longitude=float(geo_dict.get("longitude") or 0.0),
-            altitude=float(geo_dict.get("altitude") or 0.0),
+            latitude=lat,
+            longitude=lon,
+            altitude=alt,
         )
 
         # 4. 태그된 인물 (people) 목록 추출

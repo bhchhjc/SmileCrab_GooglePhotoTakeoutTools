@@ -83,6 +83,78 @@ class ProcessMode(str, Enum):
     MOVE = "move"    # 디스크 공간 절약, 대상 폴더로 이동
 
 
+class MetadataPriority(str, Enum):
+    """원본 EXIF와 Takeout JSON 충돌 시 병합 우선순위"""
+    EXIF_FIRST = "exif_first"    # 원본 EXIF 우선 (누락 시 JSON 보완, 기본값)
+    JSON_FIRST = "json_first"    # Takeout JSON 우선 (누락 시 원본 EXIF 보완)
+
+
+def merge_metadata(
+    orig_exif: Optional[MediaMetadata],
+    json_meta: Optional[MediaMetadata],
+    priority: MetadataPriority = MetadataPriority.EXIF_FIRST,
+) -> MediaMetadata:
+    """
+    원본 파일 EXIF 메타데이터와 Takeout JSON 메타데이터를 정책에 따라 병합합니다.
+    """
+    oe = orig_exif or MediaMetadata()
+    jm = json_meta or MediaMetadata()
+
+    # 1. 촬영 일시 (파일명 폴백 없이 EXIF vs JSON만 비교/보완)
+    if priority == MetadataPriority.JSON_FIRST:
+        if jm.best_datetime is not None:
+            taken_dt = jm.photo_taken_time
+            taken_ts = jm.photo_taken_timestamp
+            created_dt = jm.creation_time
+            created_ts = jm.creation_timestamp
+        else:
+            taken_dt = oe.photo_taken_time
+            taken_ts = oe.photo_taken_timestamp
+            created_dt = oe.creation_time
+            created_ts = oe.creation_timestamp
+    else:
+        if oe.best_datetime is not None:
+            taken_dt = oe.photo_taken_time
+            taken_ts = oe.photo_taken_timestamp
+            created_dt = oe.creation_time
+            created_ts = oe.creation_timestamp
+        else:
+            taken_dt = jm.photo_taken_time
+            taken_ts = jm.photo_taken_timestamp
+            created_dt = jm.creation_time
+            created_ts = jm.creation_timestamp
+
+    # 2. GPS 위치 (0.0, 0.0 무효 좌표 제외 후 우선순위 적용)
+    oe_has_gps = oe.geo_data.has_valid_coordinates
+    jm_has_gps = jm.geo_data.has_valid_coordinates
+    if priority == MetadataPriority.JSON_FIRST:
+        geo = jm.geo_data if jm_has_gps else (oe.geo_data if oe_has_gps else GeoLocation())
+    else:
+        geo = oe.geo_data if oe_has_gps else (jm.geo_data if jm_has_gps else GeoLocation())
+
+    # 3. 촬영 기기 (원본 EXIF 우선 -> JSON 보완)
+    camera_make = oe.camera_make or jm.camera_make
+    camera_model = oe.camera_model or jm.camera_model
+
+    # 4. 설명/캡션 (JSON 우선 -> 원본 EXIF 보완)
+    description = jm.description or oe.description
+
+    return MediaMetadata(
+        title=jm.title or oe.title,
+        description=description,
+        photo_taken_time=taken_dt,
+        photo_taken_timestamp=taken_ts,
+        creation_time=created_dt,
+        creation_timestamp=created_ts,
+        geo_data=geo,
+        people=list(jm.people),
+        is_favorited=jm.is_favorited,
+        camera_make=camera_make,
+        camera_model=camera_model,
+        raw_json=jm.raw_json,
+    )
+
+
 @dataclass
 class ProcessSummary:
     """파이프라인 실행 결과 요약 통계"""
@@ -123,11 +195,13 @@ class ProcessService:
         folder_strategy: FolderStrategy = FolderStrategy.YEAR_MONTH,
         process_mode: ProcessMode = ProcessMode.COPY,
         geo_language: GeoLanguage = GeoLanguage.KOREAN,
+        metadata_priority: MetadataPriority = MetadataPriority.EXIF_FIRST,
     ):
         self.media_repo = media_repo
         self.folder_strategy = folder_strategy
         self.process_mode = process_mode
         self.geo_language = geo_language
+        self.metadata_priority = metadata_priority
         self.matcher = MetadataMatcher()
 
     def get_destination_folder(
@@ -253,8 +327,8 @@ class ProcessService:
                 full_path = root_path / file_name
                 media = MediaFile.from_path(full_path)
                 if media.media_type.value != "unknown":
-                    match_res = self.matcher.match(media, index=index)
-                    # 메타데이터가 존재하는 파일 우선(0), fallback/None은 후순위(1~2)
+                    match_res = self.matcher.match(media, index=index, allow_filename_fallback=False)
+                    # 메타데이터가 존재하는 파일 우선(0), 없음(2)
                     if match_res.is_matched and match_res.match_type not in (MatchType.FALLBACK_FILENAME, MatchType.NONE):
                         priority = 0
                     elif match_res.is_matched and match_res.match_type == MatchType.FALLBACK_FILENAME:
@@ -301,19 +375,12 @@ class ProcessService:
                     notify_progress(idx, fname, "중복 파일 스킵")
                     continue
 
-                # 2.3 대상 디렉토리 및 메타데이터 선행 결정
-                best_dt = match_res.metadata.best_datetime if match_res.metadata else None
-                meta = match_res.metadata or MediaMetadata()
+                # 2.3 원본 파일 EXIF 선행 분석 및 Takeout JSON 스마트 병합
+                orig_exif = ExifWriter.extract_metadata(media.path)
+                meta = merge_metadata(orig_exif, match_res.metadata, self.metadata_priority)
+                best_dt = meta.best_datetime
 
-                # 2.3.1 카메라 정보 선행 추출 (기기별 폴더 전략용)
-                if not meta.camera_make and not meta.camera_model:
-                    c_make, c_model = ExifWriter.extract_camera_info(media.path)
-                    if c_make:
-                        meta.camera_make = c_make
-                    if c_model:
-                        meta.camera_model = c_model
-
-                # 2.3.2 GPS 역지오코딩 선행 추출 (위치별 폴더 전략용)
+                # 2.3.1 GPS 역지오코딩 선행 추출 (위치별 폴더 전략용)
                 if not meta.country_name:
                     geo = meta.geo_data
                     lat = geo.latitude if geo else None
@@ -347,9 +414,33 @@ class ProcessService:
                 else:
                     shutil.copy2(str(media.path), str(dest_file))
 
-                # 2.6 메타데이터 주입 (사진인 경우 EXIF 주입)
-                if match_res.metadata:
-                    ExifWriter.inject_metadata(dest_file, match_res.metadata)
+                # 2.6 메타데이터 주입 (원본 EXIF에서 누락되었거나 우선순위로 덮어쓸 항목만 주입)
+                need_dt = meta.best_datetime if meta.best_datetime and meta.best_datetime != orig_exif.best_datetime else None
+                need_desc = meta.description if meta.description and meta.description != orig_exif.description else ""
+                need_geo = (
+                    meta.geo_data
+                    if meta.geo_data.has_valid_coordinates
+                    and (
+                        not orig_exif.geo_data.has_valid_coordinates
+                        or (
+                            self.metadata_priority == MetadataPriority.JSON_FIRST
+                            and (
+                                meta.geo_data.latitude != orig_exif.geo_data.latitude
+                                or meta.geo_data.longitude != orig_exif.geo_data.longitude
+                            )
+                        )
+                    )
+                    else GeoLocation()
+                )
+                if need_dt or need_desc or need_geo.has_valid_coordinates:
+                    ExifWriter.inject_metadata(
+                        dest_file,
+                        MediaMetadata(
+                            photo_taken_time=need_dt,
+                            description=need_desc,
+                            geo_data=need_geo,
+                        ),
+                    )
 
                 # 2.7 파일 시스템 날짜(mtime / birthtime) 동기화
                 if best_dt:

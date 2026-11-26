@@ -35,7 +35,7 @@ from src.ui.workers import ScanWorker, ProcessWorker
 from src.core.geo_resolver import GeoLanguage
 from src.core.i18n import i18n, t
 from src.data.database import DatabaseManager
-from src.services.process_service import FolderStrategy, ProcessMode, get_strategy_display_name
+from src.services.process_service import FolderStrategy, MetadataPriority, ProcessMode, get_strategy_display_name
 
 
 # ── 서브스텝 인덱스 상수 ─────────────────────────────────────
@@ -423,6 +423,18 @@ class SetupStep(QWidget):
         mode_layout.addStretch()
         grid.addWidget(mode_widget, 3, 1)
 
+        # 5. 메타데이터 병합 우선순위 (기본값: 원본 EXIF 우선)
+        self.meta_priority_lbl = QLabel()
+        grid.addWidget(self.meta_priority_lbl, 4, 0)
+        self.meta_priority_combo = QComboBox()
+        self._populate_meta_priorities()
+        saved_priority = DatabaseManager().get_setting("metadata_priority")
+        if saved_priority:
+            p_idx = self.meta_priority_combo.findData(saved_priority)
+            if p_idx >= 0:
+                self.meta_priority_combo.setCurrentIndex(p_idx)
+        grid.addWidget(self.meta_priority_combo, 4, 1)
+
         options_layout.addLayout(grid)
         layout.addWidget(options_card)
         layout.addStretch()
@@ -544,6 +556,24 @@ class SetupStep(QWidget):
                 self.geo_lang_combo.setCurrentIndex(idx)
         self.geo_lang_combo.blockSignals(False)
 
+    def _populate_meta_priorities(self):
+        curr = self.meta_priority_combo.currentData() if hasattr(self, "meta_priority_combo") else None
+        self.meta_priority_combo.blockSignals(True)
+        self.meta_priority_combo.clear()
+        self.meta_priority_combo.addItem(
+            t("job.meta_priority_exif", "📷 원본 EXIF 우선 (누락 시 JSON 보완 · 기본)"),
+            MetadataPriority.EXIF_FIRST,
+        )
+        self.meta_priority_combo.addItem(
+            t("job.meta_priority_json", "📄 Takeout JSON 우선 (누락 시 원본 EXIF 보완)"),
+            MetadataPriority.JSON_FIRST,
+        )
+        if curr:
+            idx = self.meta_priority_combo.findData(curr)
+            if idx >= 0:
+                self.meta_priority_combo.setCurrentIndex(idx)
+        self.meta_priority_combo.blockSignals(False)
+
     def retranslate_ui(self):
         self.input_title.setText(f"📂 {t('job.source_group', '입력 폴더 (Google Takeout 압축 해제 경로)')}")
         self.input_picker.set_labels(
@@ -570,6 +600,8 @@ class SetupStep(QWidget):
         self.mode_lbl.setText(t("job.mode_label", "처리 방식"))
         self.radio_copy.setText(t("job.mode_copy", "복사 (원본 보존)"))
         self.radio_move.setText(t("job.mode_move", "이동 (원본 삭제)"))
+        self.meta_priority_lbl.setText(t("job.meta_priority_label", "메타데이터 병합"))
+        self._populate_meta_priorities()
 
         self.scan_title_lbl.setText(t("job.scan_title", "🔍 미디어 파일 사전 스캔 및 분석 중..."))
         self.scan_cancel_btn.setText(f"✕ {t('common.cancel', '취소')}")
@@ -659,6 +691,10 @@ class SetupStep(QWidget):
     @property
     def process_mode(self) -> ProcessMode:
         return ProcessMode.COPY if self.radio_copy.isChecked() else ProcessMode.MOVE
+
+    @property
+    def metadata_priority(self) -> MetadataPriority:
+        return self.meta_priority_combo.currentData() or MetadataPriority.EXIF_FIRST
 
 
 class PreviewStep(QWidget):
@@ -1217,21 +1253,23 @@ class JobView(QWidget):
         """처리 워커 실행."""
         input_path  = self._setup_step.input_picker.path
         output_path = self._setup_step.output_picker.path
-        strategy    = self._setup_step.folder_strategy
-        mode        = self._setup_step.process_mode
-        geo_lang    = self._setup_step.geo_language
+        strategy      = self._setup_step.folder_strategy
+        mode          = self._setup_step.process_mode
+        geo_lang      = self._setup_step.geo_language
+        meta_priority = self._setup_step.metadata_priority
 
         self._should_stop = False
         self._go_to_step(STEP_PROGRESS)
         self._progress_step.reset()
 
         worker = ProcessWorker(
-            input_path  = input_path,
-            output_path = output_path,
-            strategy    = strategy,
-            mode        = mode,
-            should_stop_fn = lambda: self._should_stop,
-            geo_language = geo_lang,
+            input_path        = input_path,
+            output_path       = output_path,
+            strategy          = strategy,
+            mode              = mode,
+            should_stop_fn    = lambda: self._should_stop,
+            geo_language      = geo_lang,
+            metadata_priority = meta_priority,
         )
         worker.signals.progress.connect(self._on_progress)
         worker.signals.stats_progress.connect(self._on_stats_progress)

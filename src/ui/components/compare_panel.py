@@ -368,6 +368,7 @@ class ComparePanel(QFrame):
 
     close_requested = Signal()
     location_tier_changed = Signal(bool)
+    edit_requested = Signal(dict)
 
     ROW_KEYS = [
         "1. 촬영 일시",
@@ -831,11 +832,24 @@ class ComparePanel(QFrame):
         self._json_btn.clicked.connect(self._show_json_detail)
         btn_row.addWidget(self._json_btn)
 
+        self._edit_btn = QPushButton("✏️ 정보 수정")
+        self._edit_btn.setObjectName("SecondaryButton")
+        self._edit_btn.setCursor(Qt.PointingHandCursor)
+        self._edit_btn.setEnabled(False)
+        self._edit_btn.clicked.connect(self._on_edit_clicked)
+        btn_row.addWidget(self._edit_btn)
+
         main_layout.addLayout(btn_row)
+
+    def _on_edit_clicked(self):
+        if self._current_item:
+            self.edit_requested.emit(self._current_item)
 
     def set_media_data(self, item: Dict[str, Any]):
         """선택된 미디어 항목을 11개 대조 항목 및 전체 EXIF 테이블에 렌더링"""
         self._current_item = item
+        if hasattr(self, "_edit_btn"):
+            self._edit_btn.setEnabled(bool(item))
         orig_p = item.get("original_path") or "-"
         final_p = item.get("file_path") or "-"
 
@@ -903,9 +917,13 @@ class ComparePanel(QFrame):
             self._thumb_lbl.setPixmap(QPixmap())
             self._thumb_lbl.setText("🖼️ 파일이 디스크에 존재하지 않습니다.")
 
-        # 원본 파일 실제 OS 시간 읽기
+        # 원본 파일 실제 OS 시간 및 EXIF 메타데이터 추출
+        from src.core.exif_writer import ExifWriter
+        from src.core.models import MediaMetadata
+
         orig_birth_str = "-"
         orig_mtime_str = "-"
+        orig_meta = MediaMetadata()
         if orig_p != "-" and os.path.exists(orig_p):
             try:
                 st = os.stat(orig_p)
@@ -914,36 +932,81 @@ class ComparePanel(QFrame):
                 orig_mtime_str = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
             except OSError:
                 pass
+            orig_meta = ExifWriter.extract_metadata(Path(orig_p))
+
+        # 최종 파일 실제 OS 시간 읽기
+        final_birth_str = "-"
+        final_mtime_str = "-"
+        if final_p != "-" and os.path.exists(final_p):
+            try:
+                st_f = os.stat(final_p)
+                fb_time = getattr(st_f, "st_birthtime", st_f.st_ctime)
+                final_birth_str = datetime.fromtimestamp(fb_time).strftime("%Y-%m-%d %H:%M")
+                final_mtime_str = datetime.fromtimestamp(st_f.st_mtime).strftime("%Y-%m-%d %H:%M")
+            except OSError:
+                pass
+
+        is_user_edited = bool(item.get("is_user_edited"))
 
         # 1. 촬영 일시
+        orig_taken = orig_meta.best_datetime.strftime("%Y-%m-%d %H:%M:%S") if orig_meta.best_datetime else "(미기록)"
         json_taken = json_meta.get("photoTakenTime", {}).get("formatted", "-")
         final_taken = item.get("taken_at") or "-"
-        adopted_col = 1 if json_taken != "-" else 0
-        self._render_row(0, "(카메라 미기록/왜곡)", json_taken, final_taken, adopted=adopted_col)
+        if is_user_edited:
+            adopted_col = 2
+        elif orig_taken != "(미기록)" and final_taken == orig_taken:
+            adopted_col = 0
+        elif json_taken != "-" and final_taken != "-":
+            adopted_col = 1
+        else:
+            adopted_col = -1
+        self._render_row(0, orig_taken, json_taken, final_taken, adopted=adopted_col)
 
-        # 2. GPS 위경도
-        json_lat, json_lon = 0.0, 0.0
-        if "geoData" in json_meta:
-            g = json_meta["geoData"]
-            json_lat, json_lon = g.get("latitude", 0.0), g.get("longitude", 0.0)
+        # 2. GPS 위경도 (geoData -> geoDataExif 폴백)
+        orig_gps = (
+            f"{orig_meta.geo_data.latitude:.4f}, {orig_meta.geo_data.longitude:.4f}"
+            if orig_meta.geo_data.has_valid_coordinates
+            else "(위치 없음)"
+        )
+        g_main = json_meta.get("geoData") if isinstance(json_meta.get("geoData"), dict) else {}
+        g_exif = json_meta.get("geoDataExif") if isinstance(json_meta.get("geoDataExif"), dict) else {}
+        json_lat = float(g_main.get("latitude") or 0.0)
+        json_lon = float(g_main.get("longitude") or 0.0)
+        json_alt = float(g_main.get("altitude") or 0.0)
+        if json_lat == 0.0 and json_lon == 0.0 and g_exif:
+            json_lat = float(g_exif.get("latitude") or 0.0)
+            json_lon = float(g_exif.get("longitude") or 0.0)
+            json_alt = float(g_exif.get("altitude") or 0.0)
+
         json_gps = f"{json_lat:.4f}, {json_lon:.4f}" if (json_lat != 0.0 or json_lon != 0.0) else "(위치 없음)"
-
         final_gps = f"{f_lat:.4f}, {f_lon:.4f}" if (f_lat != 0.0 or f_lon != 0.0) else "(위치 없음)"
-        adopted_gps = 1 if (f_lat != 0.0 or f_lon != 0.0) else -1
-        self._render_row(1, "(위치 없음)", json_gps, final_gps, adopted=adopted_gps)
+
+        if is_user_edited and final_gps != "(위치 없음)":
+            adopted_gps = 2
+        elif orig_meta.geo_data.has_valid_coordinates and final_gps == orig_gps:
+            adopted_gps = 0
+        elif final_gps != "(위치 없음)":
+            adopted_gps = 1
+        else:
+            adopted_gps = -1
+        self._render_row(1, orig_gps, json_gps, final_gps, adopted=adopted_gps)
 
         # 3. GPS 고도
-        json_alt = json_meta.get("geoData", {}).get("altitude", 0.0)
-        self._render_row(2, "0.0 m", f"{json_alt:.1f} m", f"{json_alt:.1f} m", adopted=1 if json_alt else -1)
+        orig_alt_txt = f"{orig_meta.geo_data.altitude:.1f} m" if orig_meta.geo_data.has_valid_coordinates else "-"
+        final_alt = float(item.get("altitude") or 0.0)
+        final_alt_txt = f"{final_alt:.1f} m" if (f_lat != 0.0 or f_lon != 0.0 or final_alt != 0.0) else "-"
+        self._render_row(2, orig_alt_txt, f"{json_alt:.1f} m", final_alt_txt, adopted=adopted_gps)
 
         # 4. 역지오코딩 위치 (지역 - 3단계/2단계 선택 모드 연동)
         final_loc_txt = self._current_loc_name if (c_name or city) else "(위치 없음)"
         self._render_row(3, "(미지원)", "(좌표 기반 계산)", final_loc_txt, adopted=2 if (c_name or city) else -1)
 
         # 5. 설명 / 캡션
+        orig_desc = orig_meta.description or "-"
         json_desc = json_meta.get("description", "-") or "-"
         final_desc = item.get("description") or "-"
-        self._render_row(4, "-", json_desc, final_desc, adopted=1 if json_desc != "-" else -1)
+        adopted_desc = 2 if is_user_edited else (1 if json_desc != "-" else (0 if orig_desc != "-" else -1))
+        self._render_row(4, orig_desc, json_desc, final_desc, adopted=adopted_desc)
 
         # 6. 인물 태그
         p_names = [p.get("name", "") for p in json_meta.get("people", []) if p.get("name")]
@@ -962,11 +1025,10 @@ class ComparePanel(QFrame):
         self._render_row(6, "-", fav_str, fav_str, adopted=1 if is_fav else -1)
 
         # 8. 파일 수정일시 (mtime)
-        final_mtime = final_taken if final_taken != "-" else "-"
-        self._render_row(7, orig_mtime_str, "동일 복원 타겟", final_mtime, adopted=1)
+        self._render_row(7, orig_mtime_str, "동일 복원 타겟", final_mtime_str if final_mtime_str != "-" else final_taken, adopted=2 if final_mtime_str != "-" else -1)
 
         # 9. 파일 생성일시 (birthtime)
-        self._render_row(8, orig_birth_str, "동일 복원 타겟", final_mtime, adopted=1)
+        self._render_row(8, orig_birth_str, "동일 복원 타겟", final_birth_str if final_birth_str != "-" else final_taken, adopted=2 if final_birth_str != "-" else -1)
 
         # 10. 파일 용량
         size_bytes = item.get("file_size") or 0
@@ -982,13 +1044,13 @@ class ComparePanel(QFrame):
         json_cam_model = json_meta.get("cameraModel") or json_meta.get("deviceModel") or ""
         json_cam = f"{json_cam_make} {json_cam_model}".strip() if (json_cam_make or json_cam_model) else "-"
 
-        orig_make, orig_model = "", ""
-        if orig_p and orig_p != "-" and os.path.exists(orig_p):
-            from src.core.exif_writer import ExifWriter
-            orig_make, orig_model = ExifWriter.extract_camera_info(Path(orig_p))
-        orig_cam = f"{orig_make} {orig_model}".strip() if (orig_make or orig_model) else "-"
+        orig_cam = (
+            f"{orig_meta.camera_make} {orig_meta.camera_model}".strip()
+            if (orig_meta.camera_make or orig_meta.camera_model)
+            else "-"
+        )
 
-        adopted_cam = 0 if orig_cam != "-" else (1 if json_cam != "-" else (2 if final_cam != "(기기 정보 없음)" else -1))
+        adopted_cam = 2 if is_user_edited else (0 if orig_cam != "-" else (1 if json_cam != "-" else -1))
         self._render_row(10, orig_cam, json_cam, final_cam, adopted=adopted_cam)
 
         # 12. SHA-256 해시
@@ -997,8 +1059,8 @@ class ComparePanel(QFrame):
         self._render_row(11, hash_short, "-", f"{hash_short} (무결성 검증)", adopted=0)
 
         # 13. 매칭 방식
-        rule_name = "supplemental-metadata" if "supplemental" in json_p_str else ("파일명.json 완전일치" if json_p_str != "-" else "파일명 날짜 Fallback")
-        self._render_row(12, "-", rule_name, "성공 적용", adopted=1)
+        rule_name = "supplemental-metadata" if "supplemental" in json_p_str else ("파일명.json 완전일치" if json_p_str != "-" else "원본 EXIF / 직접 분석")
+        self._render_row(12, "-", rule_name, "성공 적용", adopted=1 if json_p_str != "-" else 0)
 
         # 2. 하단 최종 파일 전체 EXIF 데이터 추출 및 바인딩
         self._load_all_exif(final_p)

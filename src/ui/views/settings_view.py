@@ -44,10 +44,10 @@ from src.core.geo_resolver import GeoLanguage
 from src.core.i18n import LOCALE_FLAGS, SUPPORTED_LOCALES, i18n, t
 from src.data.database import DatabaseManager
 from src.data.licenses_data import OPEN_SOURCE_PACKAGES
-from src.services.process_service import FolderStrategy
+from src.services.process_service import FolderStrategy, MetadataPriority
 from src.ui.theme import Colors, Fonts
 
-APP_VERSION = "0.9.1"
+APP_VERSION = "0.9.2"
 
 
 class OneUISettingRow(QWidget):
@@ -409,7 +409,36 @@ class SettingsView(QWidget):
 
         self._card1_row0 = OneUISettingRow("", "", self.strategy_combo)
         self._card1_row1 = OneUISettingRow("", "", mode_box)
-        self._card1 = self._build_focus_block("", "📁", "#E8F2FD", [self._card1_row0, self._card1_row1])
+
+        self.meta_priority_combo = QComboBox()
+        self._populate_meta_priority_combo()
+        self.meta_priority_combo.setFixedWidth(280)
+        self.meta_priority_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #F8F9FA;
+                border: 1px solid #DCE1E7;
+                border-radius: 10px;
+                padding: 6px 12px;
+                font-size: 12px;
+                color: #1C1D1F;
+            }
+        """)
+        saved_priority = db.get_setting("metadata_priority")
+        if saved_priority:
+            p_idx = self.meta_priority_combo.findData(saved_priority)
+            if p_idx >= 0:
+                self.meta_priority_combo.setCurrentIndex(p_idx)
+
+        def _on_priority_changed(index: int):
+            prio = self.meta_priority_combo.currentData()
+            if prio:
+                val = prio.value if hasattr(prio, "value") else str(prio)
+                db.set_setting("metadata_priority", val)
+
+        self.meta_priority_combo.currentIndexChanged.connect(_on_priority_changed)
+        self._card1_row2 = OneUISettingRow("", "", self.meta_priority_combo)
+
+        self._card1 = self._build_focus_block("", "📁", "#E8F2FD", [self._card1_row0, self._card1_row1, self._card1_row2])
         layout.addWidget(self._card1)
 
         # 카드 2: 데이터베이스 및 시스템 관리
@@ -483,6 +512,24 @@ class SettingsView(QWidget):
                 self.strategy_combo.setCurrentIndex(idx)
         self.strategy_combo.blockSignals(False)
 
+    def _populate_meta_priority_combo(self):
+        cur_data = self.meta_priority_combo.currentData() if hasattr(self, "meta_priority_combo") else None
+        self.meta_priority_combo.blockSignals(True)
+        self.meta_priority_combo.clear()
+        self.meta_priority_combo.addItem(
+            t("job.meta_priority_exif", "📷 원본 EXIF 우선 (누락 시 JSON 보완 · 기본)"),
+            MetadataPriority.EXIF_FIRST,
+        )
+        self.meta_priority_combo.addItem(
+            t("job.meta_priority_json", "📄 Takeout JSON 우선 (누락 시 원본 EXIF 보완)"),
+            MetadataPriority.JSON_FIRST,
+        )
+        if cur_data is not None:
+            idx = self.meta_priority_combo.findData(cur_data)
+            if idx >= 0:
+                self.meta_priority_combo.setCurrentIndex(idx)
+        self.meta_priority_combo.blockSignals(False)
+
     def retranslate_ui(self):
         """다국어 변경 시 설정 뷰 UI 실시간 갱신"""
         self._nav_title.setText(t("settings.title", "설정"))
@@ -505,9 +552,11 @@ class SettingsView(QWidget):
         self._card1._title_label.setText(t("settings.card_strategy_title", "기본 정리 전략"))
         self._card1_row0.set_text(t("settings.row_default_strategy", "기본 폴더 구조"), t("settings.row_default_strategy_desc", "새 정리 작업 시 기본으로 적용될 디렉토리 계층 구조입니다."))
         self._card1_row1.set_text(t("settings.row_default_mode", "기본 처리 방식"), t("settings.row_default_mode_desc", "안전하게 복사할지, 원본을 이동할지 결정합니다."))
+        self._card1_row2.set_text(t("settings.row_meta_priority", "메타데이터 병합 우선순위"), t("settings.row_meta_priority_desc", "원본 EXIF와 Takeout JSON 값이 모두 있을 때 우선 적용할 기준을 선택합니다."))
         self._r_copy.setText(t("job.mode_copy", "복사 (원본 보존)"))
         self._r_move.setText(t("job.mode_move", "이동 (원본 삭제)"))
         self._populate_strategy_combo()
+        self._populate_meta_priority_combo()
 
         # 카드 2
         self._card2._title_label.setText(t("settings.card_db_title", "데이터베이스 및 저장공간 관리"))

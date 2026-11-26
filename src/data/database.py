@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS metadata (
     country_name    TEXT,                    -- 역지오코딩 국가명 (예: 대한민국, South Korea)
     state_name      TEXT,                    -- 역지오코딩 주/도명 (예: 경기도, 캘리포니아, 하부오스트리아)
     city_name       TEXT,                    -- 역지오코딩 도시명 (예: 서울, 곡성군, 할슈타트)
+    original_snapshot TEXT,                  -- 사용자 수정 전 원본 메타데이터 JSON 스냅샷
+    is_user_edited  INTEGER DEFAULT 0,       -- 사용자 직접 수정 여부 (0: 원본, 1: 수정됨)
     FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE CASCADE
 );
 
@@ -134,11 +136,15 @@ class DatabaseManager:
         with self._conn:
             self._conn.executescript(_SCHEMA_SQL)
             # 기존 DB 호환용 컬럼 마이그레이션
-            for col in ["camera_make", "camera_model", "country_code", "country_name", "state_name", "city_name"]:
+            for col in ["camera_make", "camera_model", "country_code", "country_name", "state_name", "city_name", "original_snapshot"]:
                 try:
                     self._conn.execute(f"ALTER TABLE metadata ADD COLUMN {col} TEXT;")
                 except sqlite3.OperationalError:
                     pass
+            try:
+                self._conn.execute("ALTER TABLE metadata ADD COLUMN is_user_edited INTEGER DEFAULT 0;")
+            except sqlite3.OperationalError:
+                pass
             try:
                 self._conn.execute("CREATE INDEX IF NOT EXISTS idx_meta_camera ON metadata(camera_make, camera_model);")
                 self._conn.execute("CREATE INDEX IF NOT EXISTS idx_meta_location ON metadata(country_name, state_name, city_name);")

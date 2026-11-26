@@ -7,9 +7,10 @@ from src.ui.components.batch_rename_dialog import BatchRenameDialog
 from src.ui.components.geo_relabel_dialog import GeoRelabelDialog
 from src.ui.components.treemap_widget import TreemapWidget, TreemapNode
 from src.ui.components.treemap_dialog import TreemapDialog
+from src.ui.components.media_edit_dialog import MediaEditDialog
 
 __all__ = [
     "SidebarWidget", "M3RailItem", "ComparePanel", "ProgressCircle",
     "ReorganizeDialog", "BatchRenameDialog", "GeoRelabelDialog",
-    "TreemapWidget", "TreemapNode", "TreemapDialog"
+    "TreemapWidget", "TreemapNode", "TreemapDialog", "MediaEditDialog"
 ]

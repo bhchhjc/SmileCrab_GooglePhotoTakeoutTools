@@ -246,8 +246,10 @@ class MediaRepository:
         sql = f"""
         SELECT 
             m.id, m.file_path, m.original_path, m.file_name, m.file_ext, m.file_size, m.file_hash, m.media_type, m.album_name,
-            meta.taken_at, meta.description, meta.latitude, meta.longitude, meta.people, meta.is_favorited,
-            meta.camera_make, meta.camera_model, meta.country_code, meta.country_name, meta.state_name, meta.city_name
+            meta.taken_at, meta.taken_timestamp, meta.description, meta.latitude, meta.longitude, meta.altitude,
+            meta.people, meta.is_favorited,
+            meta.camera_make, meta.camera_model, meta.country_code, meta.country_name, meta.state_name, meta.city_name,
+            meta.original_snapshot, meta.is_user_edited
         FROM media_files m
         LEFT JOIN metadata meta ON m.id = meta.media_id
         WHERE {' AND '.join(conditions)}
@@ -415,6 +417,123 @@ class MediaRepository:
             for row in cursor.fetchall():
                 results.append(dict(row))
         return results
+
+    _SNAPSHOT_FIELDS = (
+        "taken_at",
+        "taken_timestamp",
+        "latitude",
+        "longitude",
+        "altitude",
+        "country_code",
+        "country_name",
+        "state_name",
+        "city_name",
+        "description",
+        "camera_make",
+        "camera_model",
+    )
+
+    def get_media_by_id(self, media_id: int) -> Optional[Dict[str, Any]]:
+        """단일 미디어 항목 및 메타데이터를 ID로 조회합니다."""
+        sql = """
+        SELECT
+            m.id, m.file_path, m.original_path, m.file_name, m.file_ext, m.file_size, m.file_hash, m.media_type, m.album_name,
+            meta.taken_at, meta.taken_timestamp, meta.description, meta.latitude, meta.longitude, meta.altitude,
+            meta.people, meta.is_favorited,
+            meta.camera_make, meta.camera_model, meta.country_code, meta.country_name, meta.state_name, meta.city_name,
+            meta.original_snapshot, meta.is_user_edited
+        FROM media_files m
+        LEFT JOIN metadata meta ON m.id = meta.media_id
+        WHERE m.id = ?
+        LIMIT 1;
+        """
+        with self.db.get_connection() as conn:
+            row = conn.execute(sql, (media_id,)).fetchone()
+            return dict(row) if row else None
+
+    def update_media_metadata(self, media_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        개별 미디어의 메타데이터를 수정합니다.
+        최초 수정 시 수정 직전의 원본 값을 original_snapshot에 1회 JSON 백업합니다.
+        """
+        allowed = set(self._SNAPSHOT_FIELDS)
+        filtered = {k: v for k, v in updates.items() if k in allowed}
+        if not filtered:
+            return self.get_media_by_id(media_id)
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            row = cursor.execute(
+                "SELECT * FROM metadata WHERE media_id = ? LIMIT 1;",
+                (media_id,),
+            ).fetchone()
+
+            if row is None:
+                # metadata 레코드가 없는 레거시 항목 대비 기본 레코드 생성
+                snapshot_dict = {field: None for field in self._SNAPSHOT_FIELDS}
+                snapshot_dict.update({"latitude": 0.0, "longitude": 0.0, "altitude": 0.0})
+                snapshot_json = json.dumps(snapshot_dict, ensure_ascii=False)
+                cursor.execute(
+                    "INSERT INTO metadata (media_id, original_snapshot, is_user_edited) VALUES (?, ?, 1);",
+                    (media_id, snapshot_json),
+                )
+            else:
+                row_dict = dict(row)
+                if not row_dict.get("original_snapshot"):
+                    snapshot_dict = {field: row_dict.get(field) for field in self._SNAPSHOT_FIELDS}
+                    snapshot_json = json.dumps(snapshot_dict, ensure_ascii=False)
+                    cursor.execute(
+                        "UPDATE metadata SET original_snapshot = ? WHERE media_id = ?;",
+                        (snapshot_json, media_id),
+                    )
+
+            set_clauses = [f"{col} = ?" for col in filtered.keys()]
+            set_clauses.append("is_user_edited = 1")
+            params = list(filtered.values()) + [media_id]
+            cursor.execute(
+                f"UPDATE metadata SET {', '.join(set_clauses)} WHERE media_id = ?;",
+                params,
+            )
+            conn.commit()
+
+        return self.get_media_by_id(media_id)
+
+    def reset_media_metadata(self, media_id: int) -> Optional[Dict[str, Any]]:
+        """
+        original_snapshot에 저장된 원본 메타데이터로 복원하고 is_user_edited를 0으로 되돌립니다.
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            row = cursor.execute(
+                "SELECT original_snapshot FROM metadata WHERE media_id = ? LIMIT 1;",
+                (media_id,),
+            ).fetchone()
+            if not row or not row["original_snapshot"]:
+                return None
+
+            try:
+                snapshot = json.loads(row["original_snapshot"])
+            except Exception as exc:
+                logger.warning("original_snapshot 파싱 실패 [media_id=%s]: %s", media_id, exc)
+                return None
+
+            if not isinstance(snapshot, dict):
+                return None
+
+            restore_cols = [f for f in self._SNAPSHOT_FIELDS if f in snapshot]
+            if not restore_cols:
+                return None
+
+            set_clauses = [f"{col} = ?" for col in restore_cols]
+            set_clauses.append("is_user_edited = 0")
+            params = [snapshot[col] for col in restore_cols] + [media_id]
+            cursor.execute(
+                f"UPDATE metadata SET {', '.join(set_clauses)} WHERE media_id = ?;",
+                params,
+            )
+            conn.commit()
+
+        return self.get_media_by_id(media_id)
 
     def update_media_geo_names(
         self, items: List[Tuple[str, str, str, str, int]]

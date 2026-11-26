@@ -31,7 +31,7 @@ from src.core.models import MatchType, MediaFile
 from src.data.database import DatabaseManager
 from src.data.repositories.media_repo import MediaRepository
 from src.services.process_service import (
-    FolderStrategy, ProcessMode, ProcessService, ProcessSummary,
+    FolderStrategy, MetadataPriority, ProcessMode, ProcessService, ProcessSummary,
     calculate_file_hash,
 )
 from src.services.reorganize_service import (
@@ -227,15 +227,17 @@ class ProcessWorker(QRunnable):
         mode:           ProcessMode,
         should_stop_fn: Optional[Callable[[], bool]] = None,
         geo_language:   GeoLanguage = GeoLanguage.KOREAN,
+        metadata_priority: MetadataPriority = MetadataPriority.EXIF_FIRST,
     ):
         super().__init__()
-        self.input_path     = Path(input_path)
-        self.output_path    = Path(output_path)
-        self.strategy       = strategy
-        self.mode           = mode
-        self.geo_language   = geo_language
-        self._should_stop   = should_stop_fn or (lambda: False)
-        self.signals        = WorkerSignals()
+        self.input_path        = Path(input_path)
+        self.output_path       = Path(output_path)
+        self.strategy          = strategy
+        self.mode              = mode
+        self.geo_language      = geo_language
+        self.metadata_priority = metadata_priority
+        self._should_stop      = should_stop_fn or (lambda: False)
+        self.signals           = WorkerSignals()
 
     def run(self):
         """처리 파이프라인 실행 (별도 스레드)."""
@@ -245,10 +247,11 @@ class ProcessWorker(QRunnable):
             repo = MediaRepository(db)
 
             service = ProcessService(
-                media_repo       = repo,
-                folder_strategy  = self.strategy,
-                process_mode     = self.mode,
-                geo_language     = self.geo_language,
+                media_repo        = repo,
+                folder_strategy   = self.strategy,
+                process_mode      = self.mode,
+                geo_language      = self.geo_language,
+                metadata_priority = self.metadata_priority,
             )
 
             def on_progress(cur: int, total: int, fname: str, status: str, stats: Optional[dict] = None):

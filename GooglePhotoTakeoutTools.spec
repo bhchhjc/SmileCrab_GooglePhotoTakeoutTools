@@ -105,8 +105,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': 'Smile Crab',
             'CFBundleDisplayName': 'Smile Crab',
-            'CFBundleShortVersionString': '0.9.1',
-            'CFBundleVersion': '0.9.1',
+            'CFBundleShortVersionString': '0.9.2',
+            'CFBundleVersion': '0.9.2',
             'NSHighResolutionCapable': 'True',
             'NSRequiresAquaSystemAppearance': 'False',
         },
