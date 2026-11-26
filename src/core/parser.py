@@ -30,8 +30,11 @@ class JsonParser:
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                logger.warning("JSON 루트 형식이 dict가 아님 [%s]: %s", json_path, type(data).__name__)
+                return None
             return cls.parse_dict(data)
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError, TypeError, ValueError) as e:
             logger.warning("JSON 파싱 실패 [%s]: %s", json_path, e)
             return None
 
@@ -51,10 +54,12 @@ class JsonParser:
 
         # 3. GPS 위치 정보 파싱 (geoData 우선, 없으면 geoDataExif 참조)
         geo_dict = data.get("geoData") or data.get("geoDataExif") or {}
+        if not isinstance(geo_dict, dict):
+            geo_dict = {}
         geo_location = GeoLocation(
-            latitude=float(geo_dict.get("latitude", 0.0)),
-            longitude=float(geo_dict.get("longitude", 0.0)),
-            altitude=float(geo_dict.get("altitude", 0.0)),
+            latitude=float(geo_dict.get("latitude") or 0.0),
+            longitude=float(geo_dict.get("longitude") or 0.0),
+            altitude=float(geo_dict.get("altitude") or 0.0),
         )
 
         # 4. 태그된 인물 (people) 목록 추출

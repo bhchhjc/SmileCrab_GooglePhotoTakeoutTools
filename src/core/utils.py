@@ -6,16 +6,22 @@ GooglePhotoTakeoutTools - Core Utilities
 import re
 import unicodedata
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 
-def normalize_unicode(text: str) -> str:
+def normalize_unicode(text: Any) -> str:
     """
     macOS의 NFD(자소 분리) 문자열을 표준 NFC로 통일 정규화합니다.
     크로스플랫폼(Mac/Windows) 파일 비교 및 검색 시 필수적인 함수입니다.
+    문자열 외(list, None 등)가 전달되어도 안전하게 문자열로 변환합니다.
     """
     if not text:
         return ""
+    if not isinstance(text, str):
+        if isinstance(text, (list, tuple)):
+            text = " ".join(str(item) for item in text if item is not None)
+        else:
+            text = str(text)
     return unicodedata.normalize("NFC", text)
 
 

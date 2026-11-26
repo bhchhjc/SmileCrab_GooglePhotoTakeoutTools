@@ -47,7 +47,7 @@ from src.data.licenses_data import OPEN_SOURCE_PACKAGES
 from src.services.process_service import FolderStrategy
 from src.ui.theme import Colors, Fonts
 
-APP_VERSION = "0.9.0"
+APP_VERSION = "0.9.1"
 
 
 class OneUISettingRow(QWidget):

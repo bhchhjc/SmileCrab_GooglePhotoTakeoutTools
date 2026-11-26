@@ -69,6 +69,28 @@ class TestJsonParser(unittest.TestCase):
         non_exist = self.test_dir / "not_found.json"
         self.assertIsNone(JsonParser.parse_file(non_exist))
 
+    def test_parse_non_string_fields_and_list_root(self):
+        # title/description/people.name 에 list가 들어와도 TypeError 없이 안전 파싱
+        weird_json = self.test_dir / "weird.json"
+        weird_json.write_text(
+            json.dumps({
+                "title": ["IMG_0001.jpg"],
+                "description": ["메모1", "메모2"],
+                "people": [{"name": ["홍길동"]}],
+            }),
+            encoding="utf-8",
+        )
+        meta = JsonParser.parse_file(weird_json)
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta.title, "IMG_0001.jpg")
+        self.assertEqual(meta.description, "메모1 메모2")
+        self.assertEqual(meta.people, ["홍길동"])
+
+        # 루트가 JSON 배열인 경우 None 반환
+        list_root = self.test_dir / "list_root.json"
+        list_root.write_text("[1, 2, 3]", encoding="utf-8")
+        self.assertIsNone(JsonParser.parse_file(list_root))
+
 
 if __name__ == "__main__":
     unittest.main()
