@@ -1717,7 +1717,8 @@ class GeoResolver:
 
         # 2. 2차 글로벌 17만 거점 K-D Tree 빌드 (바이너리 캐시)
         self._global_root: Optional[_KDNode] = None
-        bin_path = Path(__file__).resolve().parent.parent.parent / "assets" / "geodata" / "cities150k.bin"
+        base_dir = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent.parent
+        bin_path = base_dir / "assets" / "geodata" / "cities150k.bin"
         if bin_path.exists():
             try:
                 global_points = []

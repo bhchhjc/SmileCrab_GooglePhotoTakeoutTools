@@ -15,9 +15,10 @@ theme.py
   - 활성 메뉴 텍스트/아이콘 : #1A73E8
 """
 
+import sys
 from pathlib import Path
 
-_ASSETS_ICONS_DIR = Path(__file__).resolve().parent.parent.parent / "assets" / "icons"
+_ASSETS_ICONS_DIR = (Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent.parent) / "assets" / "icons"
 ICON_RADIO_UNCHECKED = str(_ASSETS_ICONS_DIR / "radio_unchecked.svg").replace("\\", "/")
 ICON_RADIO_CHECKED = str(_ASSETS_ICONS_DIR / "radio_checked.svg").replace("\\", "/")
 ICON_RADIO_DISABLED = str(_ASSETS_ICONS_DIR / "radio_disabled.svg").replace("\\", "/")

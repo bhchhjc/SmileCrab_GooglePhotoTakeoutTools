@@ -16,30 +16,16 @@ hidden_imports = [
     'piexif',
     'PIL',
     'PIL.Image',
+    'mutagen',
+    'mutagen.mp4',
+    'mutagen.id3',
     'sqlite3',
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtWidgets',
-    'src.core.models',
-    'src.core.utils',
-    'src.core.parser',
-    'src.core.matcher',
-    'src.core.exif_writer',
-    'src.core.os_sync',
-    'src.services.process_service',
-    'src.data.database',
-    'src.data.repositories.media_repo',
-    'src.ui.theme',
-    'src.ui.workers',
-    'src.ui.components.sidebar_widget',
-    'src.ui.components.compare_panel',
-    'src.ui.views.dashboard_view',
-    'src.ui.views.job_view',
-    'src.ui.views.history_view',
-    'src.ui.views.library_view',
-    'src.ui.views.settings_view',
-    'src.ui.main_window',
-]
+    'PySide6.QtSvg',
+    'PySide6.QtSvgWidgets',
+] + collect_submodules('src')
 
 # 플랫폼별 아이콘 파일 경로
 icon_win = str(PROJECT_ROOT / 'assets' / 'icons' / 'app_icon.ico')
@@ -47,6 +33,8 @@ icon_mac = str(PROJECT_ROOT / 'assets' / 'icons' / 'app_icon.icns')
 
 datas = [
     ('assets', 'assets'),
+    ('src/locales', 'src/locales'),
+    ('src/locales', 'locales'),
 ]
 
 a = Analysis(
@@ -115,6 +103,8 @@ if sys.platform == 'darwin':
         icon=icon_mac,
         bundle_identifier='com.littleplanet.googlephototakeouttools',
         info_plist={
+            'CFBundleName': 'Smile Crab',
+            'CFBundleDisplayName': 'Smile Crab',
             'CFBundleShortVersionString': '0.9.0',
             'CFBundleVersion': '0.9.0',
             'NSHighResolutionCapable': 'True',

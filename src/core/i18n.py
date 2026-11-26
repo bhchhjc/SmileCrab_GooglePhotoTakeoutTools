@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import locale
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -66,7 +67,13 @@ class I18nManager(QObject):
         super().__init__(parent)
         self._initialized = True
 
-        self._locales_dir = Path(__file__).resolve().parent.parent / "locales"
+        if getattr(sys, "frozen", False):
+            base_dir = Path(sys._MEIPASS)
+            self._locales_dir = base_dir / "src" / "locales"
+            if not self._locales_dir.exists():
+                self._locales_dir = base_dir / "locales"
+        else:
+            self._locales_dir = Path(__file__).resolve().parent.parent / "locales"
         self._translations: Dict[str, Dict[str, Any]] = {}
         self._current_locale: str = DEFAULT_LOCALE
 
